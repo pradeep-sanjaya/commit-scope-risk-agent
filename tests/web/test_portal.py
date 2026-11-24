@@ -1,3 +1,5 @@
+import re
+
 from fastapi.testclient import TestClient
 
 from scope_agent.persistence.jobs import JobQueue
@@ -95,3 +97,15 @@ def test_search_and_filters_via_http():
     assert "PAY-100" in c.get("/portal", params={"q": "checkout"}).text
     assert "PAY-100" not in c.get("/portal", params={"q": "zzz"}).text
     assert "PAY-100" in c.get("/portal", params={"high": "1"}).text
+
+
+def test_epic_list_page_layout():
+    html = client().get("/portal").text
+    assert '<select name="project"' in html and '<option value="PAY"' in html
+    assert "High risk only" in html and 'class="num"' in html
+    assert 0 < html.index("Not in an Epic") < html.index("Tickets without an Epic")
+    assert re.search(r'class="badge b-high">1 high<', html)
+    selected = client().get("/portal", params={"project": "PAY", "high": "1"}).text
+    assert '<option value="PAY" selected' in selected and re.search(r'name="high"[^>]*checked', selected)
+    assert "Test scope pending" in client(status="pending").get("/portal").text
+    assert "No Epics match these filters." in client().get("/portal", params={"q": "zzz"}).text

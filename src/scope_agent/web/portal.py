@@ -73,7 +73,7 @@ def build_router(queries: PortalQueries, user_dependency, clock: Clock = utcnow)
     @router.get("", response_class=HTMLResponse)
     def epic_list(q: str = "", project: str = "", high: str = ""):
         rows = queries.epic_list(q or None, project or None, bool(high))
-        return render("epic_list", rows=rows, q=q, project=project, high=bool(high))
+        return render("epic_list", rows=rows, q=q, project=project, high=bool(high), projects=queries.projects())
 
     def tab_body(ctx: dict) -> str:
         return env.get_template(f"portal/_tab_{ctx['tab'].replace('-', '_')}.html.j2").render(**ctx)

@@ -68,3 +68,15 @@ def test_matrix_cell():
     q, _, _ = seed()
     assert [r.commit for r in q.matrix_cell("PAY-100", "Feature flags", "PAY-103")] == ["b1"]
     assert q.matrix_cell("PAY-100", "Checkout API", "PAY-103") == []
+
+
+def test_projects_lists_key_prefixes():
+    q, _, _ = seed()
+    assert q.projects() == ["PAY"]  # PAY-100 and PAY-7; unassigned/* excluded
+
+
+def test_epic_list_carries_test_scope_status():
+    assert seed()[0].epic_list(None, None, False)[0].test_scope_status == "ok"
+    rows = seed(status="pending")[0].epic_list(None, None, False)
+    assert rows[0].subject == "PAY-100" and rows[0].test_scope_status == "pending"
+    assert rows[-1].test_scope_status is None  # synthetic row

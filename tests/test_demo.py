@@ -78,7 +78,7 @@ def test_seeded_portal_pages_render(seeded):
     db, q = seeded
     c = TestClient(create_app("w", ["development"], JobQueue(db), RatingRepository(db), "r", portal_queries=q))
     home = c.get("/portal")
-    assert home.status_code == 200 and "DEMO-100" in home.text and "report pending" in home.text
+    assert home.status_code == 200 and "DEMO-100" in home.text and "Report pending" in home.text
     assert "Feature flags" in c.get("/portal/epics/DEMO-100").text
     assert "Test scope pending (LLM budget)" in c.get("/portal/epics/DEMO-200").text
     assert "non_functional" in c.get("/portal/epics/DEMO-100/tab/test-scope").text

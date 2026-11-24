@@ -1,31 +1,61 @@
 {% extends "portal/base.html.j2" %}
 {% from "portal/_macros.html.j2" import sev %}
+{% block title %}Epics · QA Impact Portal{% endblock %}
 {% block content %}
+<div class="page-head">
+  <h1>Epics</h1>
+  <p class="lead">What changed, where, and what to test together, per Epic.</p>
+</div>
 <form class="filters" method="get" action="/portal">
-  <input type="search" name="q" value="{{ q }}" placeholder="Search Epic, ticket, area or repo…">
-  <input type="text" name="project" value="{{ project }}" placeholder="Project (e.g. PAY)" size="12">
-  <label><input type="checkbox" name="high" value="1" {% if high %}checked{% endif %}> Has high risk</label>
-  <button type="submit">Filter</button>
+  <input type="search" name="q" value="{{ q }}" placeholder="Search Epic, ticket, area or repo…" aria-label="Search Epics">
+  <select name="project" aria-label="Project">
+    <option value="">All projects</option>
+    {% for p in projects %}<option value="{{ p }}"{% if p == project %} selected{% endif %}>{{ p }}</option>{% endfor %}
+  </select>
+  <label class="check"><input type="checkbox" name="high" value="1"{% if high %} checked{% endif %}> High risk only</label>
+  <button type="submit" class="btn btn-primary">Filter</button>
 </form>
+{% set epics, other = [], [] %}
+{% for r in rows %}{% set _ = (other if r.subject.startswith("_") else epics).append(r) %}{% endfor %}
+<div class="card">
 <div class="table-wrap">
 <table>
-<tr><th>Epic</th><th>Tickets</th><th>Devs</th><th>Areas</th><th>Overlaps</th><th>Risk</th><th>Last change</th></tr>
-{% for r in rows %}
-{% set synthetic = r.subject.startswith("_") %}
-<tr>
-  <td>{% if synthetic %}<i>{{ r.title }}</i>{% elif r.report_pending %}<b>{{ r.subject }}</b> {{ r.title if r.title != r.subject }} <span class="muted report-pending">report pending</span>{% else %}<a href="/portal/epics/{{ r.subject | urlencode }}"><b>{{ r.subject }}</b></a> {{ r.title if r.title != r.subject }}{% endif %}</td>
-  <td>{{ r.tickets or "–" }}</td><td>{{ r.developers }}</td><td>{{ r.areas }}</td>
-  <td>{{ (r.overlaps or "–") if not synthetic else "–" }}</td>
+<thead>
+<tr><th>Epic</th><th class="num">Tickets</th><th class="num">Devs</th><th class="num">Areas</th><th class="num">Overlaps</th><th>Risk</th><th>Last change</th></tr>
+</thead>
+<tbody>
+{% macro risk(r) -%}
+{%- for level, short in [("high", "high"), ("medium", "med"), ("low", "low")] %}{% if r.severity_counts.get(level) %}{{ sev(level, r.severity_counts[level] ~ " " ~ short) }}{% endif %}{% endfor -%}
+{%- endmacro %}
+{% for r in epics %}
+<tr class="row">
   <td>
-    {% if r.severity_counts.get("high") %}{{ sev("high", r.severity_counts["high"] ~ " high") }}{% endif %}
-    {% if r.severity_counts.get("medium") %}{{ sev("medium", r.severity_counts["medium"] ~ " medium") }}{% endif %}
-    {% if r.severity_counts.get("low") %}{{ sev("low", r.severity_counts["low"] ~ " low") }}{% endif %}
+    {% if r.report_pending %}<span class="key">{{ r.subject }}</span> <span class="cell-title">{{ r.title if r.title != r.subject }}</span><span class="state state-pending">Report pending</span>
+    {% else %}<a class="key" href="/portal/epics/{{ r.subject | urlencode }}">{{ r.subject }}</a> <a class="cell-title" href="/portal/epics/{{ r.subject | urlencode }}" style="color: inherit">{{ r.title if r.title != r.subject }}</a>
+      {% if r.test_scope_status == "pending" %}<span class="state state-scope">Test scope pending</span>{% elif r.test_scope_status == "error" %}<span class="state state-scope">Test scope failed</span>{% endif %}
+    {% endif %}
   </td>
-  <td {% if r.new_commits_since_prev %}class="new"{% endif %}>{{ r.last_change | ago }}{% if r.new_commits_since_prev %} · +{{ r.new_commits_since_prev }} commits{% endif %}</td>
+  <td class="num">{{ r.tickets or "–" }}</td><td class="num">{{ r.developers }}</td><td class="num">{{ r.areas }}</td>
+  <td class="num">{% if r.overlaps %}<b>{{ r.overlaps }}</b>{% else %}–{% endif %}</td>
+  <td>{{ risk(r) }}</td>
+  <td>{{ r.last_change | ago }}{% if r.new_commits_since_prev %} · <span class="new">+{{ r.new_commits_since_prev }} commits</span>{% endif %}</td>
 </tr>
-{% else %}
-<tr><td colspan="7" class="muted">No Epics match.</td></tr>
 {% endfor %}
+{% if other %}
+<tr class="group"><td colspan="7">Not in an Epic</td></tr>
+{% for r in other %}
+<tr class="row">
+  <td><span class="cell-title">{{ r.title }}</span>{% if r.subject == "_unassigned" %} <span class="sub">add a JIRA key to the commit message to link these</span>{% endif %}</td>
+  <td class="num">{{ r.tickets or "–" }}</td><td class="num">{{ r.developers }}</td><td class="num">{{ r.areas }}</td>
+  <td class="num">–</td><td>{{ risk(r) }}</td><td>{{ r.last_change | ago }}</td>
+</tr>
+{% endfor %}
+{% endif %}
+{% if not rows %}
+<tr><td colspan="7" class="empty">No Epics match these filters.</td></tr>
+{% endif %}
+</tbody>
 </table>
+</div>
 </div>
 {% endblock %}

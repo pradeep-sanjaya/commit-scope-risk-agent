@@ -33,6 +33,7 @@ class EpicListRow(BaseModel):
     last_change: datetime | None
     new_commits_since_prev: int
     report_pending: bool = False  # records exist but no report has been built yet (or its job failed)
+    test_scope_status: str | None = None  # latest report's: "ok", "pending" (LLM budget) or "error"
 
 
 class EpicPage(BaseModel):
@@ -120,6 +121,7 @@ class PortalQueries:
                     overlaps=len(agg.overlaps), severity_counts=agg.severity_counts,
                     last_change=self._records.latest_change(subject),
                     new_commits_since_prev=report.diff.new_commits,
+                    test_scope_status=report.content.test_scope_status,
                 )
                 keys = [t.key for t in agg.tickets] + [c.ticket for c in agg.matrix]
                 epics.append((row, [subject, row.title, *keys, *(r.area for r in agg.area_rows),
@@ -158,6 +160,10 @@ class PortalQueries:
         ids = dict.fromkeys(f for r in self._records.for_subject(subject) for f in r.finding_ids)
         found = [f for fid in ids if (f := self._findings.get(fid))]
         return sorted(found, key=lambda f: -f.severity.rank)
+
+    def projects(self) -> list[str]:
+        """JIRA project keys that have recorded work, for the Epic list's project filter."""
+        return sorted({s.split("-")[0] for s in self._records.subjects() if not s.startswith(UNASSIGNED_PREFIX)})
 
     def ticket_has_commits(self, key: str) -> bool:
         """From stored records only (no JIRA call), so the search box can route to a ticket cheaply."""
