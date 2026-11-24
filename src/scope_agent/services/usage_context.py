@@ -1,19 +1,10 @@
-import difflib
-
 from scope_agent.adapters.bitbucket import BitbucketClient
+from scope_agent.domain.file_selection import unified_diff
 from scope_agent.domain.models import CommitData, DependencyChange, FileChange
 from scope_agent.domain.swaps import any_import, changed_lines, import_prefixes
 
 CONFIG_GLOBS = ["**/application*.y*ml", "**/application*.properties", "**/environment*.ts"]
 MAX_CONFIG_FILES = 5
-
-
-def _unified_diff(path: str, before: str | None, after: str | None) -> str:
-    lines = difflib.unified_diff(
-        (before or "").splitlines(), (after or "").splitlines(),
-        fromfile=f"a/{path}", tofile=f"b/{path}", n=3, lineterm="",
-    )
-    return "\n".join(lines)
 
 
 def _relevant(f: FileChange, change: DependencyChange) -> bool:
@@ -34,7 +25,7 @@ class UsageContextBuilder:
     def build(self, commit: CommitData, change: DependencyChange) -> str:
         config = self._config(commit)
         diffs = [
-            f"### diff {f.path}\n{_unified_diff(f.path, f.before, f.after)}"
+            f"### diff {f.path}\n{unified_diff(f)}"
             for f in commit.files
             if f.before != f.after and _relevant(f, change)
         ]
