@@ -1,0 +1,22 @@
+<html><body>
+<p>The following items from a recent push are shared for review.</p>
+{% for it in items %}
+<div>
+<h3>[{{ it.finding.severity.value }}] {{ it.finding.title }}</h3>
+<p>Why it was flagged: {{ it.finding.explanation }}</p>
+{% if it.finding.evidence %}<ul>{% for e in it.finding.evidence %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+<p><a href="{{ it.commit_url }}">Commit</a>{% for key, url in it.ticket_links %} | <a href="{{ url }}">{{ key }}</a>{% endfor %}</p>
+<p>Suggested reviewers: {{ it.finding.suggested_reviewers | join(", ") }}</p>
+<p><a href="{{ it.useful_url }}">Useful</a> | <a href="{{ it.noise_url }}">Noise</a></p>
+</div>
+{% endfor %}
+{% if summaries %}
+<h2>Library changes</h2>
+<ul>
+{% for s in summaries %}
+<li>{{ s.library }} ({{ s.kind }}): {{ s.summary }}{% for l in s.links %} <a href="{{ l }}">{{ l }}</a>{% endfor %}</li>
+{% endfor %}
+</ul>
+{% endif %}
+<p><em>This is an automated review aid. Nothing has been blocked.</em></p>
+</body></html>

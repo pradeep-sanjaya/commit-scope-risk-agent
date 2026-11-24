@@ -1,0 +1,28 @@
+The following items from a recent push are shared for review.
+
+{% for it in items %}
+[{{ it.finding.severity.value }}] {{ it.finding.title }}
+Why it was flagged: {{ it.finding.explanation }}
+{% for e in it.finding.evidence %}
+  Evidence: {{ e }}
+{% endfor %}
+Commit: {{ it.commit_url }}
+{% for key, url in it.ticket_links %}
+Ticket {{ key }}: {{ url }}
+{% endfor %}
+Suggested reviewers: {{ it.finding.suggested_reviewers | join(", ") }}
+Useful: {{ it.useful_url }}
+Noise: {{ it.noise_url }}
+
+{% endfor %}
+{% if summaries %}
+Library changes
+{% for s in summaries %}
+- {{ s.library }} ({{ s.kind }}): {{ s.summary }}
+{% for l in s.links %}
+  {{ l }}
+{% endfor %}
+{% endfor %}
+
+{% endif %}
+This is an automated review aid. Nothing has been blocked.

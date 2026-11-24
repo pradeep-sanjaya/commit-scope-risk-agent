@@ -1,0 +1,21 @@
+Daily digest for review: {{ total }} findings ({{ high }} high), {{ start }} to {{ end }}
+
+Gap statistics
+Commits without a key: {{ missing_key }}
+Tickets with missing ACs: {{ missing_ac }}
+Tickets with vague ACs: {{ vague_ac }}
+Analysis errors: {{ errors }}
+Deferred (budget): {{ deferred }}
+
+{% for r in repos %}
+== {{ r.repo }} ==
+{% for t in r.tickets %}
+-- {{ t.key }}{% if t.url %} ({{ t.url }}){% endif %}
+
+{% for it in t.entries %}
+[{{ it.finding.severity.value }}] {{ it.finding.title }} - {{ it.finding.explanation }} ({{ it.commit_url }})
+{% endfor %}
+{% endfor %}
+
+{% endfor %}
+This is an automated review aid. Nothing has been blocked.

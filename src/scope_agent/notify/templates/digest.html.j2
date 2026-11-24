@@ -1,0 +1,24 @@
+<html><body>
+<h2>Daily digest for review</h2>
+<p>{{ total }} findings ({{ high }} high), {{ start }} to {{ end }}</p>
+<h3>Gap statistics</h3>
+<ul>
+<li>Commits without a key: {{ missing_key }}</li>
+<li>Tickets with missing ACs: {{ missing_ac }}</li>
+<li>Tickets with vague ACs: {{ vague_ac }}</li>
+<li>Analysis errors: {{ errors }}</li>
+<li>Deferred (budget): {{ deferred }}</li>
+</ul>
+{% for r in repos %}
+<h3>{{ r.repo }}</h3>
+{% for t in r.tickets %}
+<h4>{% if t.url %}<a href="{{ t.url }}">{{ t.key }}</a>{% else %}{{ t.key }}{% endif %}</h4>
+<ul>
+{% for it in t.entries %}
+<li>[{{ it.finding.severity.value }}] {{ it.finding.title }} - {{ it.finding.explanation }} (<a href="{{ it.commit_url }}">commit</a>)</li>
+{% endfor %}
+</ul>
+{% endfor %}
+{% endfor %}
+<p><em>This is an automated review aid. Nothing has been blocked.</em></p>
+</body></html>
