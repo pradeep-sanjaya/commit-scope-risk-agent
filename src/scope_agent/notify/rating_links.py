@@ -7,6 +7,11 @@ def rating_token(secret: str, finding_id: str, value: str) -> str:
     return digest[:32]
 
 
+def verify_rating_token(secret: str, finding_id: str, value: str, token: str) -> bool:
+    expected = rating_token(secret, finding_id, value)
+    return hmac.compare_digest(expected.encode(), token.encode("utf-8", "replace"))
+
+
 def rating_url(base: str, secret: str, finding_id: str, value: str) -> str:
     token = rating_token(secret, finding_id, value)
     return f"{base.rstrip('/')}/rate/{finding_id}?v={value}&t={token}"

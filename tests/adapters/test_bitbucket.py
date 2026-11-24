@@ -182,3 +182,8 @@ def test_get_file_encodes_special_path_characters(client):
     assert req.url.raw_path == (
         b"/rest/api/1.0/projects/PAY/repos/svc/raw/docs/a%20b%23c%3Fd%2541.md?at=main"
     )
+
+
+def test_verify_signature_non_ascii_header_is_false():
+    from scope_agent.adapters.bitbucket import verify_signature
+    assert verify_signature("s", b"{}", "sha256=é✓") is False

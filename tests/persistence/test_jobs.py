@@ -110,3 +110,38 @@ def test_claim_postgres_skip_locked(clock):
         c1 = q.claim(60, session=s1)
         c2 = q.claim(60, session=s2)
     assert {c1.id, c2.id} == {a, b}
+
+
+def test_transitions_on_non_running_job_are_noops(jobs, clock):
+    jid = jobs.enqueue("push", {}, "k")  # queued, never claimed
+    assert jobs.complete(jid) is False
+    assert jobs.retry(jid, clock.now, "x") is False
+    assert jobs.fail(jid, "x") is False
+    assert jobs.defer(jid, clock.now) is False
+    assert jobs.release(jid) is False
+    assert jobs.count_by_status() == {"queued": 1}
+
+
+def test_stale_worker_cannot_touch_reclaimed_then_finished_job(jobs, clock):
+    jid = jobs.enqueue("push", {}, "k")
+    jobs.claim(60)
+    clock.advance(seconds=61)
+    jobs.claim(60)  # second worker reclaims
+    assert jobs.complete(jid) is True  # second worker finishes
+    assert jobs.retry(jid, clock.now, "stale") is False  # first worker, late
+    assert jobs.fail(jid, "stale") is False
+    assert jobs.count_by_status() == {"done": 1}
+
+
+def test_release_never_drives_attempts_negative(jobs):
+    jid = jobs.enqueue("push", {}, "k")
+    jobs.claim(60)
+    assert jobs.release(jid) is True
+    assert jobs.release(jid) is False
+    assert jobs.claim(60).attempts == 1
+
+
+def test_transitions_return_true_when_running(jobs, clock):
+    jid = jobs.enqueue("push", {}, "k")
+    jobs.claim(60)
+    assert jobs.complete(jid) is True

@@ -21,3 +21,11 @@ def test_link_builder():
     assert lb.commit("PAY/gateway", "abc") == "https://bb.example/projects/PAY/repos/gateway/commits/abc"
     assert lb.ticket("PAY-1") == "https://jira.example/browse/PAY-1"
     assert lb.rating("f1", "noise").startswith("https://portal.example/rate/f1?v=noise&t=")
+
+
+def test_verify_rating_token():
+    from scope_agent.notify.rating_links import rating_token, verify_rating_token
+    t = rating_token("s", "f1", "useful")
+    assert verify_rating_token("s", "f1", "useful", t) is True
+    assert verify_rating_token("s", "f1", "noise", t) is False
+    assert verify_rating_token("s", "f1", "useful", "é✓") is False

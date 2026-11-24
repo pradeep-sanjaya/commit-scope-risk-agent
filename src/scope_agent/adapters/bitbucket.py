@@ -18,7 +18,7 @@ def verify_signature(secret: str, body: bytes, header: str | None) -> bool:
     if not header:
         return False
     expected = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(expected, header)
+    return hmac.compare_digest(expected.encode(), header.encode("utf-8", "replace"))
 
 
 def parse_refs_changed(payload: dict, branch_globs: list[str]) -> list[PushJob]:
