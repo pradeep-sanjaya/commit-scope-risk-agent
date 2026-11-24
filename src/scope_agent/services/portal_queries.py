@@ -159,6 +159,10 @@ class PortalQueries:
         found = [f for fid in ids if (f := self._findings.get(fid))]
         return sorted(found, key=lambda f: -f.severity.rank)
 
+    def ticket_has_commits(self, key: str) -> bool:
+        """From stored records only (no JIRA call), so the search box can route to a ticket cheaply."""
+        return bool(self._records.for_ticket(key))
+
     def ticket_page(self, key: str) -> TicketPage | None:
         records = _newest_first(self._records.for_ticket(key))
         try:

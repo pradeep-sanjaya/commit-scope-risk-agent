@@ -3,13 +3,31 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>{% block title %}QA Impact Portal{% endblock %}</title>
 <link rel="stylesheet" href="/portal/static/portal.css">
-<script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js" integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2" crossorigin="anonymous"></script>
+{#- Served by the app itself: the portal must work on networks that block public CDNs. -#}
+<script src="/portal/static/htmx.min.js" integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2" defer></script>
 </head>
 <body>
-<header class="top"><a href="/portal">QA Impact Portal</a> <span class="muted">read-only; for review</span></header>
-<main>
+<header class="topbar">
+  <a class="brand" href="/portal">
+    <svg class="brand-mark" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+      <rect width="24" height="24" rx="6" fill="currentColor" opacity=".18"/>
+      <path d="M6 13.5l3.5 3.5L18 8.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span>QA Impact</span>
+  </a>
+  <nav class="topnav" aria-label="Sections">
+    <a href="/portal" aria-current="page">Epics</a>
+  </nav>
+  <form class="topsearch" role="search" method="get" action="/portal/search">
+    <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <input type="search" name="q" placeholder="Search Epic, ticket, area or repo…" aria-label="Search">
+  </form>
+  <span class="topnote">Read-only · for review</span>
+</header>
+<main class="page">
 {% block content %}{% endblock %}
 </main>
 </body>

@@ -1,9 +1,11 @@
 """Read-only, server-rendered QA portal. Every tab is also a full page (`?tab=`); htmx only enhances."""
 
+import re
 from datetime import datetime, timezone
+from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from jinja2 import Environment, PackageLoader, StrictUndefined
 
 from scope_agent.persistence.database import Clock, utcnow
@@ -11,6 +13,7 @@ from scope_agent.services.portal_queries import PortalQueries
 
 TABS = ("areas-list", "areas-matrix", "tickets", "test-scope", "risks", "history")
 DEFAULT_TAB = "areas-list"
+_TICKET_KEY = re.compile(r"[A-Z][A-Z0-9]+-\d+")
 SEVERITY_CLASS = {"high": "sev-h", "medium": "sev-m", "low": "sev-l", "info": "sev-l"}
 
 
@@ -58,6 +61,14 @@ def build_router(queries: PortalQueries, user_dependency, clock: Clock = utcnow)
         if tab == "risks":
             ctx["risks"] = queries.epic_risks(subject)
         return ctx
+
+    @router.get("/search")
+    def search(q: str = ""):
+        """Top-bar search: a ticket key with commits opens its page; anything else searches the Epic list."""
+        key = q.strip().upper()
+        if _TICKET_KEY.fullmatch(key) and queries.ticket_has_commits(key):
+            return RedirectResponse(f"/portal/tickets/{quote(key, safe='')}", status_code=303)
+        return RedirectResponse(f"/portal?{urlencode({'q': q})}", status_code=303)
 
     @router.get("", response_class=HTMLResponse)
     def epic_list(q: str = "", project: str = "", high: str = ""):

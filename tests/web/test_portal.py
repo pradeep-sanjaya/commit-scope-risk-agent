@@ -42,7 +42,7 @@ def test_portal_routes_render():
     c = client()
     home = c.get("/portal")
     assert home.status_code == 200 and "PAY-100" in home.text and "Tickets without an Epic" in home.text
-    assert "htmx.org@1.9.12" in home.text and "sha384-" in home.text
+    assert "/portal/static/htmx.min.js" in home.text and "sha384-" in home.text  # vendored, no CDN
     epic = c.get("/portal/epics/PAY-100")
     assert epic.status_code == 200 and "Feature flags" in epic.text and 'class="ov"' in epic.text
     assert "Report v2" in epic.text and "+2 commits since v1" in epic.text
