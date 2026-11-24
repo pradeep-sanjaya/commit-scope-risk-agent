@@ -26,20 +26,16 @@ class ImpactRepository:
         if not records:
             return
         with joined_session(self._db, session) as s:
-            existing = {
-                (r.repo, r.commit)
-                for r in s.execute(select(impact_records.c.repo, impact_records.c.commit)).all()
-            }
-            fresh: list[ImpactRecord] = []
-            for r in records:  # skip stored commits entirely so areas never drift from the record
-                if (r.repo, r.commit) not in existing:
-                    existing.add((r.repo, r.commit))
-                    fresh.append(r)
-            if not fresh:
-                return
-            s.execute(insert_stmt(s, impact_records).on_conflict_do_nothing(), [_to_row(r) for r in fresh])
+            unique = list({(r.repo, r.commit): r for r in reversed(records)}.values())[::-1]  # first wins
+            inserted = s.execute(
+                insert_stmt(s, impact_records).on_conflict_do_nothing()
+                .returning(impact_records.c.repo, impact_records.c.commit),
+                [_to_row(r) for r in unique],
+            ).all()
+            won = {(row.repo, row.commit) for row in inserted}
             areas = [
-                {"repo": r.repo, "commit": r.commit, "area": a} for r in fresh for a in dict.fromkeys(r.areas)
+                {"repo": r.repo, "commit": r.commit, "area": a}
+                for r in unique if (r.repo, r.commit) in won for a in dict.fromkeys(r.areas)
             ]
             if areas:
                 s.execute(insert_stmt(s, impact_areas).on_conflict_do_nothing(), areas)

@@ -59,3 +59,11 @@ def test_save_joins_caller_session(db):
     except RuntimeError:
         pass
     assert repo.for_subject("PAY-100") == []
+
+
+def test_in_batch_duplicates_first_wins_and_areas_follow(db):
+    repo = ImpactRepository(db)
+    repo.save([rec("c1", areas=("A",)), rec("c1", areas=("B",), note="dup")])
+    assert [r.test_note for r in repo.for_subject("PAY-100")] == [["n"]]
+    with db.session() as s:
+        assert [r.area for r in s.execute(select(impact_areas)).all()] == ["A"]
