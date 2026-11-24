@@ -4,10 +4,10 @@
 {% set vq = ("&v=" ~ report.version) if pinned else "" %}
 {% set vq1 = ("?v=" ~ report.version) if pinned else "" %}
 <div id="tabs">
-<nav class="tabs">
-{% for t, label, group in [("areas-list", "Impacted areas", ("areas-list", "areas-matrix")), ("tickets", "Tickets", ("tickets",)), ("test-scope", "Test scope", ("test-scope",)), ("risks", "Risks", ("risks",)), ("history", "History", ("history",))] %}
+<nav class="tabs" aria-label="Epic report">
+{% for t, label, group, count in [("areas-list", "Impacted areas", ("areas-list", "areas-matrix"), counts["areas"]), ("tickets", "Tickets", ("tickets",), counts["tickets"]), ("test-scope", "Test scope", ("test-scope",), counts["test-scope"]), ("risks", "Risks", ("risks",), counts["risks"]), ("history", "History", ("history",), none)] %}
   <a href="{{ base }}?tab={{ t }}{{ vq }}"{% if tab in group %} class="on" aria-current="page"{% endif %}
-     hx-get="{{ base }}/tab/{{ t }}{{ vq1 }}" hx-target="#tabs" hx-swap="outerHTML" hx-push-url="{{ base }}?tab={{ t }}{{ vq }}">{{ label }}</a>
+     hx-get="{{ base }}/tab/{{ t }}{{ vq1 }}" hx-target="#tabs" hx-swap="outerHTML" hx-push-url="{{ base }}?tab={{ t }}{{ vq }}">{{ label }}{% if count is not none %}<span class="cnt">{{ count }}</span>{% endif %}</a>
 {% endfor %}
 </nav>
 <div id="tab-body">{{ body | safe }}</div>

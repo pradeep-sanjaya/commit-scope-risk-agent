@@ -14,11 +14,41 @@ def client(**kw):
     return TestClient(app)
 
 
-def _highlighted_tabs(html: str) -> list[str]:
-    import re
-    nav = re.search(r'<nav class="tabs">(.*?)</nav>', html, re.S)
+def _tab_nav(html: str) -> str:
+    nav = re.search(r'<nav class="tabs"[^>]*>(.*?)</nav>', html, re.S)
     assert nav, "tab nav missing"
-    return re.findall(r'<a [^>]*class="on"[^>]*>([^<]+)</a>', nav.group(1))
+    return nav.group(1)
+
+
+def _highlighted_tabs(html: str) -> list[str]:
+    """Labels of highlighted tabs, without their count badge."""
+    links = re.findall(r'<a [^>]*class="on"[^>]*>(.*?)</a>', _tab_nav(html), re.S)
+    return [re.sub(r"<span class=\"cnt\">.*?</span>|<[^>]+>", "", inner).strip() for inner in links]
+
+
+def test_epic_header_and_summary_cards():
+    html = client().get("/portal/epics/PAY-100").text
+    kpis = re.findall(r'<div class="kpi-n">(\d+)</div>\s*<div class="kpi-l">([^<]+)</div>', html)
+    assert [(label, int(n)) for n, label in kpis] == [
+        ("Tickets", 4), ("Developers", 3), ("Areas", 3), ("Overlaps", 1), ("High risk", 1)]
+    assert 'class="kpi alert"' in html  # one high-risk area
+    assert "Report v2" in html and "+2 commits" in html and "since v1" in html
+    assert re.search(r'<span class="key">PAY-100</span>', html)
+
+
+def test_tabs_show_counts():
+    nav = _tab_nav(client().get("/portal/epics/PAY-100").text)
+    for label, count in [("Impacted areas", 3), ("Tickets", 4), ("Test scope", 2), ("Risks", 1)]:
+        assert f'{label}<span class="cnt">{count}</span>' in nav, label
+    assert "History<span" not in nav
+
+
+def test_tab_links_have_full_page_fallbacks():
+    """Without htmx every tab, toggle and matrix cell still works as a plain link."""
+    for tab in ("areas-list", "areas-matrix"):
+        html = client().get(f"/portal/epics/PAY-100?tab={tab}").text
+        for anchor in re.findall(r"<a [^>]*hx-get=[^>]*>", html):
+            assert re.search(r'href="/portal/(epics|tickets)/', anchor), anchor
 
 
 def test_tab_switch_moves_the_highlight():

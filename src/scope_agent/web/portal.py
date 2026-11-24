@@ -56,11 +56,12 @@ def build_router(queries: PortalQueries, user_dependency, clock: Clock = utcnow)
         page = queries.epic_page(subject, version)
         if page is None:
             raise HTTPException(404, "unknown epic or version")
-        ctx = {"page": page, "report": page.report, "agg": page.report.content.aggregate,
-               "diff": page.report.diff, "tab": tab, "pinned": version is not None, "tabs": TABS}
-        if tab == "risks":
-            ctx["risks"] = queries.epic_risks(subject)
-        return ctx
+        agg = page.report.content.aggregate
+        risks = queries.epic_risks(subject)
+        counts = {"areas": len(agg.area_rows), "tickets": len(agg.tickets),
+                  "test-scope": len(page.report.content.test_scope or []), "risks": len(risks)}
+        return {"page": page, "report": page.report, "agg": agg, "diff": page.report.diff, "tab": tab,
+                "pinned": version is not None, "tabs": TABS, "risks": risks, "counts": counts}
 
     @router.get("/search")
     def search(q: str = ""):

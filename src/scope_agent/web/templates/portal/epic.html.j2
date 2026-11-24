@@ -1,21 +1,28 @@
 {% extends "portal/base.html.j2" %}
-{% from "portal/_macros.html.j2" import sev %}
 {% block title %}{{ page.subject }} · QA Impact Portal{% endblock %}
 {% block content %}
-<div class="crumb"><a href="/portal">Epics</a> › {{ page.subject }}</div>
-<h2>{{ page.subject }}{% if page.title != page.subject %} · {{ page.title }}{% endif %}</h2>
-<div class="strip">
-  <div><b>{{ agg.counts.get("tickets", 0) }}</b> tickets</div><div><b>{{ agg.counts.get("developers", 0) }}</b> devs</div>
-  <div><b>{{ agg.counts.get("repos", 0) }}</b> repos</div><div><b>{{ agg.counts.get("commits", 0) }}</b> commits</div>
-  <div>{% if agg.severity_counts.get("high") %}{{ sev("high", agg.severity_counts["high"] ~ " high") }}{% endif %}
-       {% if agg.severity_counts.get("medium") %}{{ sev("medium", agg.severity_counts["medium"] ~ " med") }}{% endif %}</div>
-  <div class="new">Report v{{ report.version }}{% if report.version > 1 %} · +{{ diff.new_commits }} commits since v{{ report.version - 1 }}{% endif %}</div>
-  {% if report.version != page.versions[-1].version %}<div class="muted">Older version. <a href="/portal/epics/{{ page.subject | urlencode }}?tab={{ tab }}">View latest</a></div>{% endif %}
+<div class="crumb"><a href="/portal">Epics</a> / {{ page.subject }}</div>
+<div class="title-row">
+  <h1>{{ page.title }}</h1>
+  {% if page.title != page.subject %}<span class="key">{{ page.subject }}</span>{% endif %}
+  <span class="ver">Report v{{ report.version }}{% if report.version > 1 %} · <span class="new">+{{ diff.new_commits }} commits since v{{ report.version - 1 }}</span>{% endif %}</span>
+</div>
+{% if report.version != page.versions[-1].version %}
+<p class="notice">You are viewing an older version. <a href="/portal/epics/{{ page.subject | urlencode }}?tab={{ tab }}">View latest (v{{ page.versions[-1].version }})</a></p>
+{% endif %}
+{% set high = agg.severity_counts.get("high", 0) %}
+<div class="kpis">
+  {% for n, label in [(agg.counts.get("tickets", 0), "Tickets"), (agg.counts.get("developers", 0), "Developers"), (counts["areas"], "Areas"), (agg.overlaps | length, "Overlaps")] %}
+  <div class="kpi"><div class="kpi-n">{{ n }}</div>
+    <div class="kpi-l">{{ label }}</div></div>
+  {% endfor %}
+  <div class="kpi{% if high %} alert{% endif %}"><div class="kpi-n">{{ high }}</div>
+    <div class="kpi-l">High risk</div></div>
 </div>
 {% if report.content.test_scope_status == "pending" %}
-<div class="banner">Test scope pending (LLM budget). The impacted areas below are complete; the test scope will appear in the next report version.</div>
+<div class="banner" role="status">Test scope pending (LLM budget). The impacted areas below are complete; the test scope will appear in the next report version.</div>
 {% elif report.content.test_scope_status == "error" %}
-<div class="banner">Test scope could not be generated for this version; it will be retried.</div>
+<div class="banner" role="status">Test scope could not be generated for this version; it will be retried.</div>
 {% endif %}
 {% include "portal/_tabs.html.j2" %}
 {% endblock %}
