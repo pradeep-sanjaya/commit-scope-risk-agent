@@ -9,9 +9,11 @@
 
 It emails the author and leads for each push, and sends PMO a daily digest. It never blocks anything.
 
+It also keeps an immutable **impact record** for every commit. From those it rebuilds a versioned, consolidated **Epic impact report**: impacted areas, overlaps between tickets, and test scope. QA browses these in a read-only **QA Impact Portal** served by the web process.
+
 **Architecture:** One container image runs three process types:
-- **`web`** verifies Bitbucket webhooks, enqueues jobs, and records "useful / noise" ratings.
-- **`worker`** claims jobs from Postgres and runs the analysis pipeline. It can scale horizontally.
+- **`web`** verifies Bitbucket webhooks, enqueues jobs, records "useful / noise" ratings, and serves the QA Impact Portal (server-rendered Jinja2 + htmx).
+- **`worker`** claims jobs from Postgres and dispatches them by kind: `push` runs the analysis pipeline, and `epic_report` rebuilds an Epic report. It can scale horizontally.
 - **`digest`** is a one-off process triggered by the platform scheduler.
 
 The code is layered so each module has a single responsibility:
@@ -39,7 +41,8 @@ All configuration comes from environment variables.
   - Domain modules perform no I/O.
   - Only `composition.py` constructs concrete adapters.
   - A class whose description needs "and" is split.
-- **Report-only:** nothing blocks a push or merge, and nothing is written to Bitbucket or JIRA.
+- **Report-only:** nothing blocks a push or merge, and nothing is written to Bitbucket or JIRA. The portal is read-only.
+- **Impact records are immutable.** Epic report versions are append-only and never overwritten.
 - **Branches analyzed:** from `SCOPE_BRANCHES`, default `development,hotfix/*,release/*`.
 - **Bitbucket DC:** REST `1.0`, Bearer token. The webhook HMAC arrives as `X-Hub-Signature: sha256=<hex>`.
 - **JIRA Cloud:** REST v3, basic auth (email + API token). The Epic comes from `parent`. Rich text is ADF.
@@ -63,7 +66,7 @@ All configuration comes from environment variables.
 
 ```
 pyproject.toml, uv.lock, Dockerfile, docker-compose.yml, .env.example, .gitignore, README.md
-deploy/routing.example.yaml, deploy/dependency-hints.example.yaml
+deploy/routing.example.yaml, deploy/dependency-hints.example.yaml, deploy/areas.example.yaml
 src/scope_agent/
   settings.py                 Settings (env only) + validation
   logging.py                  structlog JSON-to-stdout setup
@@ -81,6 +84,9 @@ src/scope_agent/
     chunking.py               token-budget chunking (pure)
     routing.py                RoutingConfig + reviewers/recipients (pure)
     dependency_hints.py       DependencyHints model (pure)
+    areas.py                  AreaMap model + area_for(repo, path) (pure)
+    impact.py                 change facts: endpoints, migrations, config, ImpactRecord (pure)
+    epic_report.py            aggregation: areas, overlaps, matrix, version diff (pure)
   config_files.py             load routing + dependency-hints YAML from paths
   persistence/
     database.py               engine, metadata, create_all
@@ -91,6 +97,8 @@ src/scope_agent/
     cache.py                  KeyValueCache
     usage.py                  TokenUsageMeter
     meta.py                   MetaStore
+    impact.py                 ImpactRepository
+    reports.py                ReportRepository (Epic report versions)
   adapters/
     http.py                   shared httpx client factory with retry
     bitbucket.py              BitbucketClient
@@ -118,6 +126,9 @@ src/scope_agent/
     pipeline.py               PushPipeline
     push_notifier.py          PushNotifier
     digest.py                 DigestService
+    impact_recorder.py        builds ImpactRecords for a push
+    epic_report.py            EpicReportBuilder (rebuild + LLM test scope + versioning)
+    portal_queries.py         read models for the portal
   notify/
     rating_links.py           token + URL
     push_email.py             render push email
@@ -127,9 +138,13 @@ src/scope_agent/
     app.py                    create_app
     webhook.py                webhook router
     rating.py                 rating router
+    auth.py                   optional trusted-header auth dependency
+    portal.py                 portal router
+    templates/portal/*.j2     portal pages + htmx partials
   worker/
     retry_policy.py           RetryPolicy
-    worker.py                 Worker (claim → run → notify → complete)
+    handlers.py               JobHandler protocol, PushJobHandler, EpicReportJobHandler
+    worker.py                 Worker (claim → dispatch by kind → complete/retry/defer)
   composition.py              Container / build_container (only place adapters are constructed)
   cli.py                      typer: web, worker, digest, migrate, analyze, backtest, report
 tests/ mirrors src/; fixtures in tests/fixtures/
@@ -153,7 +168,7 @@ tests/ mirrors src/; fixtures in tests/fixtures/
   - Nexus: `nexus_url`, `nexus_user`, `nexus_password`
   - SMTP and links: `smtp_host`, `smtp_from`, `public_base_url`, `rating_secret`
   - Storage and recipients: `database_url`, `digest_recipients: list[str]`
-  - Data files: `routing_file: Path`, `dependency_hints_file: Path`
+  - Data files: `routing_file: Path`, `dependency_hints_file: Path`, `areas_file: Path`
 
   Defaults:
   - Branches and JIRA: `branches=["development","hotfix/*","release/*"]`, `jira_ac_field: str | None=None`, `jira_ac_heading="Acceptance Criteria"`, `jira_cache_ttl_seconds=600`
@@ -164,9 +179,10 @@ tests/ mirrors src/; fixtures in tests/fixtures/
     - `max_commits_per_push=200`, `max_chunks_per_commit=3`
   - Release notes and docs: `github_api_url="https://api.github.com"`, `github_token: str | None=None`, `nexus_maven_repo="maven-public"`, `nexus_npm_repo="npm-group"`, `docs_max_chars=40_000`, `usage_context_max_chars=20_000`, `library_profile_max_chars=30_000`
   - SMTP: `smtp_port=587`, `smtp_user: str | None=None`, `smtp_password: str | None=None`, `smtp_starttls=True`
+  - Reports and portal: `report_debounce_seconds=300`, `portal_auth_header: str | None=None`
   - Runtime: `timezone="UTC"`, `http_timeout_seconds=30.0`, `job_lease_seconds=900`, `retry_backoff_seconds: list[int]=[30,120,600]`, `worker_poll_seconds=2.0`, `log_level="INFO"`, `port=8080`
 
-  The secrets are typed `SecretStr`: tokens, passwords, keys and `webhook_secret`/`rating_secret`. A `model_validator` checks that `routing_file` and `dependency_hints_file` exist.
+  The secrets are typed `SecretStr`: tokens, passwords, keys and `webhook_secret`/`rating_secret`. A `model_validator` checks that `routing_file`, `dependency_hints_file` and `areas_file` exist.
 - Produces: `load_settings() -> Settings`. On `ValidationError` it writes one line per bad or missing variable to stderr (`SCOPE_<NAME>: <reason>`) and raises `SystemExit(2)`.
 - Produces: `configure_logging(level: str) -> None`, which sets structlog to emit JSON to stdout with an ISO timestamp, the level and the event.
 - Produces (`domain/models.py`):
@@ -241,9 +257,12 @@ def test_severity_rank_and_is_merge(): ...  # high>medium>low>info; parents ["1"
 - Produces: `Database(url: str)` exposing `.engine` and `.session()` (a context manager, commit on exit), plus `create_all()`. The tables are `jobs`, `analyzed_commits` (PK repo+sha), `findings` (lists as JSON), `library_summaries`, `analysis_errors`, `ratings` (PK finding_id), `cache`, `token_usage` (PK day) and `meta`.
 - Each repository below takes `(db: Database, clock: Callable[[], datetime] = utcnow)`.
 
-  **`JobQueue`**
-  - `enqueue(job: PushJob, dedup_key: str) -> int | None`: returns `None` when the key exists. The key is `f"{repo}:{branch}:{to_hash}"`.
-  - `claim(lease_seconds: int) -> tuple[int, PushJob, int] | None`: returns the id, the job and the attempts. It picks the oldest job that is either:
+  **`JobQueue`** (generic; it knows nothing about job contents)
+  - `ClaimedJob(id: int, kind: str, payload: dict, attempts: int)`
+  - `enqueue(kind: str, payload: dict, dedup_key: str, dedup_scope: Literal["forever","pending"] = "forever", not_before: datetime | None = None) -> int | None`. It returns `None` when deduped.
+    - `"forever"`: any existing job with the key blocks the insert. Push jobs use this, with key `f"push:{repo}:{branch}:{to_hash}"`.
+    - `"pending"`: only a job with the same key that is still `queued` or `deferred` blocks the insert. Epic report debouncing uses this, with key `f"epic_report:{epic}"` and `not_before = now + debounce`.
+  - `claim(lease_seconds: int) -> ClaimedJob | None`. It picks the oldest job that is either:
     - `queued` or `deferred` with `not_before <= now`, or
     - `running` with `lease_until < now` (crash recovery).
 
@@ -269,22 +288,28 @@ def test_severity_rank_and_is_merge(): ...  # high>medium>low>info; parents ["1"
 - [ ] **Step 1: Write failing tests**
 
 ```python
-def test_enqueue_dedups(jobs, job):
-    assert jobs.enqueue(job, "PAY/r:development:abc") is not None
-    assert jobs.enqueue(job, "PAY/r:development:abc") is None
+def test_enqueue_dedups_forever(jobs):
+    assert jobs.enqueue("push", {"a": 1}, "push:PAY/r:development:abc") is not None
+    assert jobs.enqueue("push", {"a": 1}, "push:PAY/r:development:abc") is None
 
-def test_claim_skips_future_deferred(jobs, job, clock):
-    jid = jobs.enqueue(job, "k"); jobs.claim(60); jobs.defer(jid, until=clock.now + timedelta(hours=1))
+def test_enqueue_pending_scope_debounces_then_allows_after_completion(jobs, clock):
+    jid = jobs.enqueue("epic_report", {"epic": "PAY-100"}, "epic_report:PAY-100", "pending", not_before=clock.now)
+    assert jobs.enqueue("epic_report", {"epic": "PAY-100"}, "epic_report:PAY-100", "pending") is None
+    c = jobs.claim(60); jobs.complete(c.id)
+    assert jobs.enqueue("epic_report", {"epic": "PAY-100"}, "epic_report:PAY-100", "pending") is not None
+
+def test_claim_skips_future_deferred(jobs, clock):
+    jid = jobs.enqueue("push", {}, "k"); jobs.claim(60); jobs.defer(jid, until=clock.now + timedelta(hours=1))
     assert jobs.claim(60) is None
-    clock.advance(hours=2); assert jobs.claim(60)[0] == jid
+    clock.advance(hours=2); assert jobs.claim(60).id == jid
 
-def test_expired_lease_is_reclaimed(jobs, job, clock):            # Review Focus 2
-    jid = jobs.enqueue(job, "k"); jobs.claim(60)
+def test_expired_lease_is_reclaimed(jobs, clock):                 # Review Focus 2
+    jid = jobs.enqueue("push", {}, "k"); jobs.claim(60)
     assert jobs.claim(60) is None                                  # still leased
     clock.advance(seconds=61); claimed = jobs.claim(60)
-    assert claimed[0] == jid and claimed[2] == 2
+    assert claimed.id == jid and claimed.attempts == 2
 
-def test_release_returns_job_without_counting_attempt(jobs, job): ...  # claim → release → claim gives attempts == 1
+def test_release_returns_job_without_counting_attempt(jobs): ...  # claim → release → claim gives attempts == 1
 
 def test_findings_save_atomic_with_ledger(db, finding):
     with db.session() as s:
@@ -310,19 +335,21 @@ Add `test_claim_postgres_skip_locked`. It is skipped unless `SCOPE_TEST_DATABASE
 ### Task 3: Mounted data files: routing and dependency hints
 
 **Files:**
-- Create: `src/scope_agent/domain/routing.py` (models only for now), `src/scope_agent/domain/dependency_hints.py`, `src/scope_agent/config_files.py`, `deploy/routing.example.yaml`, `deploy/dependency-hints.example.yaml`
+- Create: `src/scope_agent/domain/routing.py` (models only for now), `src/scope_agent/domain/dependency_hints.py`, `src/scope_agent/domain/areas.py`, `src/scope_agent/config_files.py`, `deploy/routing.example.yaml`, `deploy/dependency-hints.example.yaml`, `deploy/areas.example.yaml`
 - Test: `tests/test_config_files.py`
 
 **Interfaces:**
 - Produces:
   - `RepoRouting(leads: list[str] = [], paths: dict[str, list[str]] = {})` and `RoutingConfig(repos: dict[str, RepoRouting] = {}, categories: dict[str, list[str]] = {}, default_leads: list[str])`. `default_leads` is required and must be non-empty.
   - `DependencyHints(library_docs: dict[str, list[str]] = {}, internal_repos: dict[str, str] = {}, known_swaps: list[tuple[str, str]] = [])`. `internal_repos` maps a library name to `"PROJ/slug"`.
-  - `load_routing(path: Path) -> RoutingConfig` and `load_dependency_hints(path: Path) -> DependencyHints`. Both raise `ConfigFileError(path, reason)` on bad YAML or a schema error.
+  - `AreaRule(repo: str, glob: str, area: str)` and `AreaMap(rules: list[AreaRule] = [])`, in `domain/areas.py`. `repo` may be `"*"`, a slug, or `"PROJ/slug"`. `area_for(repo: str, path: str) -> str` returns the **first** matching rule's area. If none matches, it returns `f"{slug}: {first path segment}"`, or `f"{slug}: (root)"` for root files. The YAML shape is `areas: {<repo>: {<glob>: <area name>}}`, read in file order.
+  - `load_routing(path: Path) -> RoutingConfig`, `load_dependency_hints(path: Path) -> DependencyHints` and `load_areas(path: Path) -> AreaMap`. Both raise `ConfigFileError(path, reason)` on bad YAML or a schema error.
 
 - [ ] **Step 1: Write failing tests**
   - `test_load_routing_example`: it parses `deploy/routing.example.yaml`, which mirrors the example in spec §6.7.
   - `test_routing_requires_default_leads`
   - `test_load_hints_example`
+  - `test_load_areas_example_and_area_for`: `area_for("PAY/payments-service", "src/main/java/x/checkout/Api.java") == "Checkout API"`; an unmapped `web/src/app/x.ts` gives `"payments-service: web"`; a `"*"` rule matches any repo.
   - `test_bad_yaml_raises_config_file_error_with_path`
 - [ ] **Step 2: Run.** Expected: FAIL.
 - [ ] **Step 3: Implement.** Use `yaml.safe_load` and pydantic validation.
@@ -394,11 +421,12 @@ The fixture `refs_changed.json` has repo `PAY/payments-service` and five changes
 - Produces: `extract_keys(message: str, branch: str | None, project_keys: list[str]) -> list[str]`. It is ordered and unique, uses regex `\b([A-Z][A-Z0-9]+-\d+)\b`, and keeps only configured projects. The branch is used only if the message has no key.
 - Produces: `adf_to_text(doc: dict | None) -> str`. Headings render as `## text`, list items as `- text`, and paragraphs as lines.
 - Produces: `extract_ac(text: str, heading: str) -> str | None`. It finds the first line matching `^#*\s*{heading}\s*:?$` (case-insensitive) and returns the trimmed lines up to the next line starting with `#`, or to the end.
-- Produces: `JiraClient(http: httpx.Client)` with `get_issue(key: str, extra_fields: list[str]) -> dict | None`. It calls `GET /rest/api/3/issue/{key}?fields=summary,description,issuetype,status,components,labels,parent,issuelinks[,extra]`, and returns `None` on 404 or 403. It is a raw adapter with no business rules.
+- Produces: `JiraClient(http: httpx.Client)` with `get_issue(key: str, extra_fields: list[str]) -> dict | None`. It calls `GET /rest/api/3/issue/{key}?fields=summary,description,issuetype,status,components,labels,parent,issuelinks[,extra]`, and returns `None` on 404 or 403. It is a raw adapter with no business rules. It also has `search(jql: str, fields: list[str], max_results: int = 200) -> list[dict]`, using `POST /rest/api/3/search/jql` and following `nextPageToken`.
 - Produces: `TicketResolver(jira: JiraClient, cache: KeyValueCache, ac_field: str | None, ac_heading: str, cache_ttl: int)` with `resolve(key) -> TicketContext | None`.
   - **Epic:** walk `parent` until `issuetype.name == "Epic"`, at most 2 hops.
   - **ACs:** taken from `ac_field` if it's set (ADF or plain string), otherwise `extract_ac(adf_to_text(description), ac_heading)`.
   - **Cache:** namespace `jira`, with `cache_ttl`.
+  - `epic_tickets(epic_key) -> list[EpicTicket]`, where `EpicTicket(key, summary, status, assignee: str | None)` is defined in `domain/models.py`. It runs JQL `parent = {epic_key} ORDER BY key` and is cached with the same TTL.
 
 - [ ] **Step 1: Write failing tests**
 
@@ -422,6 +450,7 @@ The remaining tests:
 - `test_resolver_subtask_walks_to_epic`
 - `test_resolver_uses_ac_field`
 - `test_resolver_caches`: the second resolve makes no HTTP call.
+- `test_epic_tickets_jql_and_pagination`
 - [ ] **Step 2: Run.** Expected: FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run.** Expected: PASS.
@@ -567,7 +596,7 @@ Also add:
 ### Task 9: LLM layer
 
 **Files:**
-- Create: `src/scope_agent/llm/{__init__,base,schemas,anthropic_client,budget,prompts,factory}.py`, `src/scope_agent/llm/prompts/{dependency_upgrade,dependency_new,dependency_swap,code_review}.j2`
+- Create: `src/scope_agent/llm/{__init__,base,schemas,anthropic_client,budget,prompts,factory}.py`, `src/scope_agent/llm/prompts/{dependency_upgrade,dependency_new,dependency_swap,code_review,test_scope}.j2`
 - Test: `tests/llm/test_anthropic_client.py`, `test_budget.py`, `test_prompts.py`, `test_factory.py`
 
 **Interfaces:**
@@ -575,7 +604,8 @@ Also add:
 - Produces (`schemas.py`):
   - `LLMFinding(type: FindingType, category: str, severity: Severity, title: str, explanation: str, evidence: list[str], files: list[str] = [])`
   - `DependencyVerdict(findings: list[LLMFinding], reviewer_summary: str)`
-  - `CodeVerdict(findings: list[LLMFinding], ac_quality: Literal["ok","vague","missing"], ac_quality_reason: str)`
+  - `CodeVerdict(findings: list[LLMFinding], ac_quality: Literal["ok","vague","missing"], ac_quality_reason: str, test_note: list[str])`. `test_note` has 3–6 bullets on what this commit needs tested and why.
+  - `TestScopeItem(type: Literal["functional","integration","regression","non_functional","data","environment"], what: str, why: str, tickets: list[str])` and `TestScopeVerdict(items: list[TestScopeItem])`
   - `RISK_CATEGORIES`, grouped:
     - runtime behavior: `connection_model`, `connection_pool`, `retries_timeouts`, `caching`, `resource_usage`, `tls_security`, `serialization`, `config_removed`, `concurrency`
     - change type: `schema_migration`, `auth_config`, `external_call`, `feature_flag_defaults`, `infra_config`
@@ -592,7 +622,8 @@ Also add:
   - **`dependency_upgrade`:** looks for changed defaults or runtime behavior (spec §6.4 step 3). Severity is raised when our usage relies on defaults. The summary is at most 120 words.
   - **`dependency_new`:** summarizes runtime defaults. Network, IO or concurrency libraries are at least `medium`.
   - **`dependency_swap`:** compares the two sides on connection model, connection count and keep-alive, ports, retries, caching and failure behavior. A connection-model or connection-count difference is `high` with `connection_model`.
-  - **`code_review`:** reports `risky_change` and `out_of_scope` findings. Neighboring cleanup is fine; formatting-only or test-only changes are never out of scope. Every `out_of_scope` explanation ends with: "If this was agreed outside JIRA, record it as its own ticket so it gets reviewed and planned." It also rates `ac_quality`.
+  - **`code_review`:** reports `risky_change` and `out_of_scope` findings. Neighboring cleanup is fine; formatting-only or test-only changes are never out of scope. Every `out_of_scope` explanation ends with: "If this was agreed outside JIRA, record it as its own ticket so it gets reviewed and planned." It also rates `ac_quality` and writes `test_note`.
+  - **`test_scope`:** input is the Epic's deterministic aggregate (areas, overlaps, change facts, findings) plus every ticket's ACs and the commit test notes. It must produce at least one `integration` item per overlap, one `functional` item per AC per ticket, a `non_functional` item for every high or medium runtime-risk finding, a `data` item per migration, and an `environment` item per new config or dependency.
 
 - [ ] **Step 1: Write failing tests**
   - `test_parses_tool_call`
@@ -663,7 +694,7 @@ Also add:
 - Produces: `chunk(diffs: list[tuple[str, str]], max_tokens: int, max_chunks: int) -> tuple[list[list[tuple[str, str]]], list[str]]`, returning the chunks and the skipped paths.
   - Tokens are estimated as `len // 4`.
   - 25% of the budget is reserved for ticket context.
-- Produces: `CodeAnalyzer(llm, exclude, priority, max_input_tokens, max_chunks)` with `analyze(commit, tickets: list[TicketContext]) -> CodeAnalysis(findings: list[Finding], ac_quality: Literal["ok","vague","missing"] | None, errors: list[str])`.
+- Produces: `CodeAnalyzer(llm, exclude, priority, max_input_tokens, max_chunks)` with `analyze(commit, tickets: list[TicketContext]) -> CodeAnalysis(findings: list[Finding], ac_quality: Literal["ok","vague","missing"] | None, test_note: list[str], errors: list[str])`. `test_note` concatenates the chunks' notes, deduped.
   - `ac_quality` is the worst value across chunks, or `None` when there are no tickets.
   - Skipped paths produce an `info` `risky_change` finding with category `partial_analysis`, listing the paths as evidence.
   - With no tickets, it drops `out_of_scope` findings.
@@ -698,7 +729,7 @@ Also add:
   | `ac_quality == "vague"` | `vague_ac` | `info` |
   | `epic_key is None` | `no_epic` | `info` |
 
-- Produces: `PushResult(job_id: int, job: PushJob, commits: list[CommitData], findings: list[Finding], summaries: dict[str, list[LibrarySummary]])`
+- Produces: `PushResult(job_id: int, job: PushJob, commits: list[CommitData], findings: list[Finding], summaries: dict[str, list[LibrarySummary]], keys_by_commit: dict[str, list[str]], tickets: dict[str, TicketContext | None], dependency_changes: dict[str, list[DependencyChange]], test_notes: dict[str, list[str]])`. The extra fields feed the impact recorder in Task 17.
 - Produces: `PushPipeline(bitbucket, tickets: TicketResolver, deps: DependencyAnalyzer, code: CodeAnalyzer, db: Database, findings: FindingRepository, ledger: CommitLedger, project_keys: list[str], max_commits: int)` with `run(job_id: int, job: PushJob, force: bool = False) -> PushResult`. The steps:
   1. Get the SHAs. Drop those already analyzed (unless `force`) and merges; merges are still marked as analyzed.
   2. For each commit, `get_commit`, `extract_keys`, then resolve each key once per push.
@@ -794,7 +825,7 @@ Also add:
 ### Task 15: Web process and worker process
 
 **Files:**
-- Create: `src/scope_agent/web/{__init__,app,webhook,rating}.py`, `src/scope_agent/worker/{__init__,retry_policy,worker}.py`
+- Create: `src/scope_agent/web/{__init__,app,webhook,rating}.py`, `src/scope_agent/worker/{__init__,retry_policy,handlers,worker}.py`
 - Test: `tests/web/test_webhook.py`, `test_rating.py`, `tests/worker/test_retry_policy.py`, `test_worker.py`
 
 **Interfaces:**
@@ -803,18 +834,21 @@ Also add:
     - reads the raw body first;
     - `X-Event-Key: diagnostics:ping` → 200;
     - a bad signature → 401;
-    - `repo:refs_changed` → enqueue the jobs → 202 `{"queued": n}`;
+    - `repo:refs_changed` → `jobs.enqueue("push", job.model_dump(mode="json"), f"push:{repo}:{branch}:{to_hash}")` for each job → 202 `{"queued": n}`;
     - any other event → 204.
   - **`GET /rate/{finding_id}?v=&t=`**: a valid token saves the rating and returns 200 HTML "Thanks, recorded."; an invalid one returns 403.
   - **`GET /healthz`** → 200.
 - Produces: `RetryPolicy(backoff_seconds: list[int])` with `next_attempt_at(attempts: int, now) -> datetime | None`. It returns `None` once attempts exceed the list length.
-- Produces: `Worker(jobs: JobQueue, pipeline: PushPipeline, notifier: PushNotifier, errors: FindingRepository, retry: RetryPolicy, lease_seconds: int, timezone: str, clock)`:
+- Produces (`worker/handlers.py`):
+  - `class JobHandler(Protocol): def handle(self, job_id: int, payload: dict) -> None`
+  - `PushJobHandler(pipeline: PushPipeline, notifier: PushNotifier, after_push: Callable[[PushResult], None] = lambda r: None)`. It runs the pipeline, then `after_push` (Task 17 plugs in the impact recorder), then `notifier.notify`.
+- Produces: `Worker(jobs: JobQueue, handlers: dict[str, JobHandler], errors: FindingRepository, retry: RetryPolicy, lease_seconds: int, timezone: str, clock)`:
   - `run_once() -> bool`:
-    - claim a job, run the pipeline, notify, then `complete`;
+    - claim a job, call `handlers[job.kind].handle(job.id, job.payload)`, then `complete`. An unknown kind becomes `fail`, with the error recorded;
     - on `BudgetExceeded`, `defer` until local midnight plus 5 minutes, in `timezone`;
     - on any other exception, `retry` per the policy, or `fail` and record the error with `errors.save(job_id, [], {}, [(repo, None, message)])`.
   - `run(stop: threading.Event, poll_seconds: float)`: loops on `run_once` until stopped. SIGTERM sets `stop`. A job that is mid-run when `stop` is set may finish. If the process is killed, the lease handles recovery.
-  - A notifier exception after the pipeline has succeeded is logged and the job is still completed. Findings are already saved, so a failed email must not cause a re-analysis.
+  - Inside `PushJobHandler`, a notifier exception after the pipeline has succeeded is logged and swallowed, so the job still completes. Findings are already saved, so a failed email must not cause a re-analysis.
 
 - [ ] **Step 1: Write failing tests**
   - `test_webhook_bad_signature_401`
@@ -828,6 +862,7 @@ Also add:
   - `test_worker_survives_exception_and_processes_next`
   - `test_worker_email_failure_still_completes`
   - `test_worker_stop_event_exits_loop`
+  - `test_worker_dispatches_by_kind_and_fails_unknown_kind`
 - [ ] **Step 2: Run.** Expected: FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run.** Expected: PASS.
@@ -882,3 +917,202 @@ Also add:
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** `uv run pytest -v`, then `docker compose build && docker compose run --rm migrate && docker compose up -d web worker && curl -fsS localhost:8080/healthz`. Expected: all tests PASS, and the health check returns 200.
 - [ ] **Step 5: Commit** `feat: composition root, cli process types, container setup and incident replay test`
+
+---
+
+### Task 17: Impact records (one per commit)
+
+**Files:**
+- Create: `src/scope_agent/domain/impact.py`, `src/scope_agent/persistence/impact.py`, `src/scope_agent/services/impact_recorder.py`
+- Modify: `src/scope_agent/persistence/database.py` (tables `impact_records`, `impact_areas`), `src/scope_agent/composition.py` (wire `ImpactRecorder` as `PushJobHandler.after_push`)
+- Test: `tests/domain/test_impact.py`, `tests/persistence/test_impact.py`, `tests/services/test_impact_recorder.py`
+
+**Interfaces:**
+- Consumes: `AreaMap.area_for`, `CommitData`, `DependencyChange`, `Finding`, `PushResult`, `JobQueue.enqueue`
+- Produces (`domain/impact.py`, pure):
+  - `Endpoint(method: str, path: str, change: Literal["added","removed","changed"], file: str)`
+  - `endpoint_changes(fc: FileChange) -> list[Endpoint]`
+    - **Java:** compare the before and after sets of `(METHOD, path)` from `@GetMapping|@PostMapping|@PutMapping|@DeleteMapping|@PatchMapping("…")` and `@RequestMapping(value|path="…", method=RequestMethod.X)`. A class-level `@RequestMapping` prefix is joined onto method paths.
+    - **Angular:** compare `path: '…'` entries in files matching `*routing*.ts` or `*.routes.ts`. The method is `"ROUTE"`.
+    - A path present on both sides whose annotation line changed counts as `changed`.
+  - `is_migration(path) -> bool`, which matches:
+    - `**/db/migration/V*__*.sql`
+    - `**/db/changelog/**`
+    - `**/liquibase/**`
+  - `is_config(path, priority_globs) -> bool`
+  - `ImpactRecord(repo, commit, author_name, author_email: str | None, committed_at: datetime, jira_keys: list[str], epic_key: str | None, subject: str, areas: list[str], endpoints: list[Endpoint], migrations: list[str], config_files: list[str], dependency_changes: list[DependencyChange], finding_ids: list[str], max_severity: Severity | None, test_note: list[str])`
+    - `subject` is what the record is reported under: the `epic_key` if there is one; otherwise the first JIRA key; otherwise `f"unassigned/{repo}"`.
+  - `build_impact_record(commit, keys, tickets: dict[str, TicketContext | None], dep_changes, findings, test_note, area_map, priority_globs, committed_at) -> ImpactRecord`. The areas are the deduped `area_for` over all changed paths, kept in order.
+- Produces: `ImpactRepository(db)` with:
+  - `save(records: list[ImpactRecord], session=None)`: idempotent on `(repo, commit)` and never updates an existing record.
+  - `for_subject(subject) -> list[ImpactRecord]`
+  - `for_ticket(key) -> list[ImpactRecord]`
+  - `subjects() -> list[str]`
+  - `latest_change(subject) -> datetime | None`
+- Produces: `ImpactRecorder(records: ImpactRepository, jobs: JobQueue, area_map, priority_globs, debounce_seconds, clock)` with `__call__(result: PushResult) -> None`:
+  1. Build one record per analyzed commit and save them.
+  2. For each distinct `subject` that isn't `unassigned/*`, enqueue `("epic_report", {"subject": subject}, f"epic_report:{subject}", "pending", not_before=now + debounce)`.
+
+  `committed_at` comes from `CommitData`. Add `committed_at: datetime` to `CommitData` in `domain/models.py`, populated in `BitbucketClient.get_commit` from `committerTimestamp` (ms).
+
+- [ ] **Step 1: Write failing tests**
+
+```python
+def test_spring_endpoint_changes():
+    before = '@RestController\n@RequestMapping("/api")\nclass C {\n @GetMapping("/cart") void a(){}\n}'
+    after  = '@RestController\n@RequestMapping("/api")\nclass C {\n @GetMapping("/cart") void a(){}\n @PostMapping("/checkout") void b(){}\n}'
+    assert endpoint_changes(fc("src/C.java", before, after)) == [Endpoint("POST", "/api/checkout", "added", "src/C.java")]
+
+def test_angular_route_removed():
+    assert endpoint_changes(fc("web/src/app/app-routing.module.ts", "{ path: 'settings' }", "")) == [Endpoint("ROUTE", "settings", "removed", "web/src/app/app-routing.module.ts")]
+
+def test_subject_epic_then_ticket_then_unassigned():
+    assert build_impact_record(..., keys=["PAY-101"], tickets={"PAY-101": ticket(epic_key="PAY-100")}, ...).subject == "PAY-100"
+    assert build_impact_record(..., keys=["PAY-9"], tickets={"PAY-9": ticket(epic_key=None)}, ...).subject == "PAY-9"
+    assert build_impact_record(..., keys=[], tickets={}, ...).subject == "unassigned/PAY/payments-service"
+
+def test_record_areas_migrations_config_and_max_severity(): ...  # V42__x.sql → migrations; application.yml → config_files; findings [low, high] → high
+
+def test_repository_save_is_idempotent_and_immutable(db): ...     # save same (repo, commit) twice with a different test_note → the first one is kept
+
+def test_recorder_enqueues_one_debounced_report_job_per_subject(jobs, clock):
+    # 3 commits: two under PAY-100, one unassigned → exactly one epic_report job, not_before == now + 300
+    ...
+```
+
+- [ ] **Step 2: Run.** Expected: FAIL.
+- [ ] **Step 3: Implement.** Wire it in `composition.py`: `PushJobHandler(after_push=ImpactRecorder(...))`.
+- [ ] **Step 4: Run** `uv run pytest -v`. Expected: PASS.
+- [ ] **Step 5: Commit** `feat: immutable per-commit impact records and debounced epic report jobs`
+
+---
+
+### Task 18: Epic impact reports (aggregation, LLM test scope, versions)
+
+**Files:**
+- Create: `src/scope_agent/domain/epic_report.py`, `src/scope_agent/persistence/reports.py`, `src/scope_agent/services/epic_report.py`
+- Modify: `src/scope_agent/worker/handlers.py` (add `EpicReportJobHandler`), `src/scope_agent/composition.py` (register the `"epic_report"` handler), `src/scope_agent/persistence/database.py` (table `epic_reports`)
+- Test: `tests/domain/test_epic_report.py`, `tests/persistence/test_reports.py`, `tests/services/test_epic_report.py`
+
+**Interfaces:**
+- Consumes: `ImpactRepository`, `TicketResolver.resolve` / `epic_tickets`, `FindingRepository.get`, `LLMClient`, `TestScopeVerdict`, `render_prompt("test_scope", ...)`, `BudgetExceeded`
+- Produces (`domain/epic_report.py`, pure):
+  - `AreaRow(area, tickets: list[str], developers: list[str], commits: int, change_kinds: list[str], max_severity: Severity | None, overlap: bool)`
+    - `change_kinds` ⊆ {`endpoint`, `DB migration`, `config`, `library swap`, `dependency`, `code`}.
+    - `overlap` is true when the area has more than one ticket **or** more than one developer.
+  - `MatrixCell(area, ticket, commits: int, max_severity: Severity | None)`
+  - `Aggregate(subject, tickets: list[EpicTicket], area_rows: list[AreaRow], matrix: list[MatrixCell], overlaps: list[str], counts: dict[str, int], severity_counts: dict[str, int])`
+    - `counts` has the keys `tickets`, `developers`, `repos` and `commits`.
+    - `area_rows` are sorted by severity rank descending, then commits descending.
+  - `aggregate(subject, records: list[ImpactRecord], tickets: list[EpicTicket]) -> Aggregate`. Tickets with no records still appear in `tickets`.
+  - `ReportContent(aggregate: Aggregate, test_scope: list[TestScopeItem] | None, test_scope_status: Literal["ok","pending","error"])`
+  - `diff_reports(prev: ReportContent | None, new: ReportContent) -> ReportDiff(new_commits: int, new_areas: list[str], new_overlaps: list[str], new_test_items: list[TestScopeItem])`. Test items are compared by `(type, what)`.
+- Produces: `ReportRepository(db)` with:
+  - `append(subject, content: ReportContent, diff: ReportDiff, record_count: int) -> int` (returns the new version number, starting at 1)
+  - `latest(subject) -> StoredReport | None`
+  - `versions(subject) -> list[StoredReportMeta]`
+  - `get(subject, version) -> StoredReport | None`
+
+  Here `StoredReport(subject, version, created_at, content, diff, record_count)` and `StoredReportMeta(version, created_at, record_count, diff)`.
+- Produces: `EpicReportBuilder(records, tickets: TicketResolver, findings: FindingRepository, reports: ReportRepository, llm: LLMClient, max_input_tokens: int)` with `rebuild(subject: str) -> int | None`:
+  1. Load the records. If their count equals the latest version's `record_count`, return `None`; there is nothing new.
+  2. Get `epic_tickets(subject)`; if the subject is a plain ticket, use `[that ticket]`. Resolve each ticket's ACs. Load the findings referenced by the records.
+  3. `aggregate`.
+  4. **LLM:** if the prompt fits in `max_input_tokens`, use one `test_scope` call. Otherwise, summarize per ticket first: call `test_scope` per ticket, then call it once more over the per-ticket items.
+     - `BudgetExceeded` → the status is `pending`, and the scope is copied from the previous version if there is one.
+     - `LLMOutputError` → the status is `error`.
+  5. `diff_reports` against the latest version, then `append`.
+- Produces: `EpicReportJobHandler(builder)` with `handle(job_id, payload)`, which calls `builder.rebuild(payload["subject"])`.
+
+- [ ] **Step 1: Write failing tests**
+
+```python
+def test_aggregate_overlap_matrix_and_counts():
+    recs = [rec("a1", ticket="PAY-101", dev="asha", areas=["Feature flags", "Gateway / Envoy"], sev="high", swap=True),
+            rec("b1", ticket="PAY-103", dev="ravi", areas=["Feature flags"], sev="medium"),
+            rec("c1", ticket="PAY-102", dev="nimal", areas=["Checkout API"], migrations=["V42__x.sql"])]
+    agg = aggregate("PAY-100", recs, [t("PAY-101"), t("PAY-102"), t("PAY-103"), t("PAY-104")])
+    assert agg.overlaps == ["Feature flags"]
+    assert agg.area_rows[0].area in {"Feature flags", "Gateway / Envoy"} and agg.area_rows[0].max_severity == "high"
+    assert MatrixCell("Feature flags", "PAY-103", 1, "medium") in agg.matrix
+    assert agg.counts == {"tickets": 4, "developers": 3, "repos": 1, "commits": 3}   # PAY-104 has no commits but is listed
+    assert "DB migration" in next(r for r in agg.area_rows if r.area == "Checkout API").change_kinds
+
+def test_diff_reports_new_items(): ...                     # prev without "Feature flags" overlap → new_overlaps == ["Feature flags"]
+
+def test_rebuild_appends_version_and_skips_when_unchanged(builder_with_fakes):
+    assert builder.rebuild("PAY-100") == 1
+    assert builder.rebuild("PAY-100") is None           # no new records
+    add_record(); assert builder.rebuild("PAY-100") == 2
+
+def test_rebuild_budget_exceeded_marks_pending_keeps_previous_scope(): ...
+def test_rebuild_falls_back_to_per_ticket_when_over_budget(): ...   # max_input_tokens tiny → LLM called once per ticket + once overall
+def test_versions_are_append_only(db): ...
+```
+
+- [ ] **Step 2: Run.** Expected: FAIL.
+- [ ] **Step 3: Implement.** Register `"epic_report": EpicReportJobHandler(...)` in `composition.py`.
+- [ ] **Step 4: Run** `uv run pytest -v`. Expected: PASS.
+- [ ] **Step 5: Commit** `feat: consolidated, versioned epic impact reports with llm test scope`
+
+---
+
+### Task 19: QA Impact Portal
+
+**Files:**
+- Create: `src/scope_agent/services/portal_queries.py`, `src/scope_agent/web/auth.py`, `src/scope_agent/web/portal.py`, `src/scope_agent/web/templates/portal/{base,epic_list,epic,_tab_areas_list,_tab_areas_matrix,_tab_tickets,_tab_test_scope,_tab_risks,_tab_history,_matrix_cell,ticket}.html.j2`, `src/scope_agent/web/static/portal.css`
+- Modify: `src/scope_agent/web/app.py` (mount the portal router, static files and the auth dependency), `src/scope_agent/notify/push_email.py` + `digest_email.py` + `LinkBuilder` (add portal links), `src/scope_agent/composition.py`, `README.md`
+- Test: `tests/services/test_portal_queries.py`, `tests/web/test_portal.py`, `tests/web/test_auth.py`
+
+**Interfaces:**
+- Consumes: `ReportRepository`, `ImpactRepository`, `FindingRepository`, `TicketResolver`
+- Produces: `PortalQueries(reports, records, findings, tickets)`:
+  - `epic_list(query: str | None, project: str | None, high_only: bool) -> list[EpicListRow]`, where `EpicListRow(subject, title, tickets, developers, areas, overlaps, severity_counts, last_change: datetime | None, new_commits_since_prev: int)`.
+    - The data comes from each subject's latest report.
+    - Two synthetic rows come last: `"_no_epic"` aggregates subjects that are plain tickets, and `"_unassigned"` aggregates `unassigned/*` record counts.
+    - `query` matches case-insensitively on subject, title, ticket keys, area names and repo.
+  - `epic_page(subject, version: int | None) -> EpicPage | None`, where `EpicPage(subject, title, report: StoredReport, versions: list[StoredReportMeta])`.
+  - `matrix_cell(subject, area, ticket) -> list[ImpactRecord]`
+  - `ticket_page(key) -> TicketPage | None`, where `TicketPage(ticket: TicketContext, areas: list[str], findings: list[Finding], records: list[ImpactRecord])`, with records newest first.
+- Produces: `require_portal_user(header_name: str | None) -> Callable` (a FastAPI dependency). When `header_name` is set and the header is missing or empty, it returns 401. When `header_name` is None, it does nothing. Applied to portal routes only; the webhook and rating routes are unaffected.
+- Produces: the router, with all routes `GET` and server-rendered:
+
+| Route | Renders |
+|---|---|
+| `/portal` | Epic list. Query params `q`, `project`, `high` |
+| `/portal/epics/{subject}` | Epic page with the summary strip and the default tab "Impacted areas · List". `?v=` picks a version |
+| `/portal/epics/{subject}/tab/{tab}` | htmx partial. `tab` ∈ `areas-list, areas-matrix, tickets, test-scope, risks, history` |
+| `/portal/epics/{subject}/cell?area=&ticket=` | htmx partial: commits and test notes for the matrix cell |
+| `/portal/tickets/{key}` | Ticket page |
+
+- **Page content follows spec §6.12 and the approved mockup** (`.superpowers/brainstorm/*/content/qa-portal-combined-v2.html`, local only):
+  - overlap rows highlighted;
+  - severity badges in red (high), amber (medium) and grey (low);
+  - a "Report vN · +n commits since vN-1" line;
+  - items new in this version marked in green, from `ReportDiff`;
+  - a "Test scope pending (LLM budget)" banner when the status is `pending`.
+- htmx is loaded from `https://unpkg.com/htmx.org@1.9.12` with an SRI hash. Every tab also works as a full page without JS, via `?tab=` on the Epic page.
+- **Email links:**
+  - `LinkBuilder` gains `portal_epic(subject)` and `portal_ticket(key)`.
+  - Push emails link each finding's ticket page, and its Epic page when there is one.
+  - The digest links each Epic group.
+
+- [ ] **Step 1: Write failing tests**
+  - `test_epic_list_rows_and_synthetic_rows`
+  - `test_epic_list_search_matches_area_name`
+  - `test_epic_page_specific_version`
+  - `test_ticket_page_records_newest_first`
+  - `test_portal_routes_render`: `TestClient` with in-memory repositories seeded with the PAY-100 example from Task 18. It checks that:
+    - `/portal` contains `PAY-100`;
+    - the Epic page contains `Feature flags` and the overlap class;
+    - `/tab/areas-matrix` contains a cell link for `PAY-103`;
+    - `/tab/test-scope` contains `non_functional`;
+    - `/portal/tickets/PAY-101` contains `a1b2c3d`.
+  - `test_pending_scope_banner`
+  - `test_unknown_subject_404`
+  - `test_auth_header_required_when_configured`: missing → 401, present → 200, and `/webhook/bitbucket` is unaffected.
+  - `test_push_email_contains_portal_links`
+- [ ] **Step 2: Run.** Expected: FAIL.
+- [ ] **Step 3: Implement.** Templates extend `base.html.j2`. Escape all JIRA and commit text with Jinja autoescape on. Add a README section on the portal URL, `SCOPE_PORTAL_AUTH_HEADER` and `SCOPE_AREAS_FILE`.
+- [ ] **Step 4: Run** `uv run pytest -v`, then `docker compose up -d web` and `curl -fsS localhost:8080/portal`. Expected: all tests PASS and the curl returns 200 HTML.
+- [ ] **Step 5: Commit** `feat: qa impact portal with epic list, epic tabs, matrix drill-down and ticket pages`

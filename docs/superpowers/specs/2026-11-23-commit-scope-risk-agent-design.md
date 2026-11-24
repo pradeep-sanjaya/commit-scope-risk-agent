@@ -316,6 +316,75 @@ POC and room for a local implementation (e.g. an OpenAI-compatible local server)
 Prompts live in versioned template files. Log token usage per analysis for cost
 tracking.
 
+### 6.10 Impact records (one per commit) — for QA
+Several developers work on one Epic, so QA needs a consolidated picture. Every
+analyzed commit produces an **immutable impact record**, so each update is kept:
+- `repo`, `commit`, `author`, `committed_at`, `jira_keys`, `epic_key`
+- **impacted areas:** changed files are mapped to named functional areas through a
+  mounted **area-mapping file** (`SCOPE_AREAS_FILE`), with repo + path globs → area
+  name, e.g. `payments-service: src/**/checkout/** → "Checkout API"`. Unmapped files
+  fall back to `"{repo}: {top-level module dir}"`.
+- **change facts**, detected deterministically:
+  - API endpoints added, changed or removed (Spring `@RequestMapping`,
+    `@GetMapping` and similar annotations in changed Java files; Angular route
+    definitions in `*routing*.ts` / `*.routes.ts`)
+  - DB migrations (Flyway `db/migration/V*__*.sql`, Liquibase changelogs)
+  - config and infra files (the §6.5 priority globs)
+  - dependency changes (§6.4)
+- links to that commit's findings
+- an LLM-written **commit test note**: what this commit needs tested and why.
+  It's 3–6 bullets, produced in the same call as the code review (§6.5), so it
+  needs no extra LLM call.
+
+Commits with no ticket are filed under `"unassigned/{repo}"`. A ticket with no Epic
+is its own report subject.
+
+### 6.11 Epic impact reports (consolidated, versioned)
+- When a push adds records for an Epic, the agent enqueues a **report rebuild job**
+  for that Epic. Rebuilds are debounced: a dedup key per Epic, and they run at
+  most once per `SCOPE_REPORT_DEBOUNCE_SECONDS` (default 300).
+- A rebuild reads **all** impact records for the Epic, across tickets, developers,
+  repos and branches, plus the Epic's ticket list from JIRA (JQL `parent = EPIC`).
+  That list includes tickets with no commits yet, so QA can see what hasn't landed.
+- **Deterministic parts** (no LLM):
+  - per area: tickets, developers, commit counts, change kinds, highest risk
+  - **overlaps:** areas touched by more than one ticket or developer
+  - the area × ticket matrix
+- **LLM part:** one call over the compact records (not diffs) produces the
+  **consolidated test scope**. Each item has a type, what to test, why, and its
+  source tickets. Types: functional (per AC per ticket), integration (one per
+  overlap), regression, non-functional (from risk findings), data (migrations) and
+  environment (new config or dependencies). If records exceed the token budget,
+  they're summarized per ticket first and then per Epic.
+- Each rebuild is saved as a **new version** with a diff against the previous one
+  ("new since vN"). Versions are never overwritten.
+- When the LLM budget is exhausted, the deterministic parts still update, and the
+  test scope is marked "pending".
+
+### 6.12 QA Impact Portal (decided by user: layouts A + B combined)
+Served by the `web` process as server-rendered pages: Jinja2 with htmx for the tab
+and toggle switches, and no separate front-end build. It is read-only.
+- **Epic list (landing):**
+  - search across Epic, ticket, area and repo; filters for project, status and
+    "has high risk"
+  - per Epic: tickets, developers, areas, overlaps, risk, and last change
+  - two extra rows: "Tickets without an Epic" and "Commits without a ticket"
+- **Epic page:** a summary strip (counts, risk, "Report vN, +n commits since vN-1")
+  and tabs:
+  - **Impacted areas** with a **List ⇄ Matrix** toggle; overlaps highlighted
+  - **Tickets** (all tickets in the Epic, with status and commit count)
+  - **Test scope** (consolidated, with "new in vN" marked)
+  - **Risks** (all findings)
+  - **History** (versions, with a diff of each)
+- **Matrix cell drill-down:** that ticket's commits in that area, with their test notes.
+- **Ticket page:** ACs (from JIRA), impacted areas, findings, and every recorded
+  commit with its areas and test note.
+- Push emails and the digest link to the relevant portal pages.
+- **Access** *(builder's call for the POC, not yet confirmed)*: the portal is
+  internal-only. If `SCOPE_PORTAL_AUTH_HEADER` is set (e.g. `X-Forwarded-User` from
+  the company's SSO reverse proxy), requests without that header are rejected with
+  401. No built-in login.
+
 ## 7. POC success criteria
 1. **Incident replay:** run the agent on the actual commit(s) that replaced the
    in-house feature-flag util with the flagd library. It must produce a **high**
@@ -326,6 +395,10 @@ tracking.
    high/medium findings.
 3. End-to-end on one live repo for two weeks: per-push emails and the PMO digest
    arrive, with no missed pushes.
+
+4. **QA usefulness:** for one active Epic with 2 or more developers, QA confirms that
+   the portal's impacted areas and test scope cover what they would have tested,
+   and that the overlaps shown are real.
 
 A CLI (`analyze --repo X --commit SHA`) supports criteria 1 and 2 without webhooks.
 
