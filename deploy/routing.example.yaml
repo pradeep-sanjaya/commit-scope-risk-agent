@@ -1,0 +1,9 @@
+repos:
+  payments-service:
+    leads: [lead-a@corp]
+    paths:
+      "src/main/java/**/flags/**": [flags-owner@corp]
+categories:
+  connection_model: [gateway-owner@corp, platform-sre@corp]
+  timeouts: [platform-sre@corp]
+default_leads: [eng-managers@corp]

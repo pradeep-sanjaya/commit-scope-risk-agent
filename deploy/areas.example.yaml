@@ -1,0 +1,6 @@
+areas:
+  payments-service:
+    "src/**/checkout/**": "Checkout API"
+    "src/**/flags/**": "Feature flags"
+  "*":
+    "docs/**": "Documentation"

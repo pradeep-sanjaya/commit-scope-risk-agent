@@ -1,0 +1,6 @@
+internal_repos:
+  "com.corp:flag-util": "PLAT/flag-util"
+library_docs:
+  # TODO: fill in the real documentation / release-notes URL for this library.
+  "dev.openfeature.contrib.providers:flagd": ["https://example.invalid/replace-with-flagd-release-notes"]
+known_swaps: []
