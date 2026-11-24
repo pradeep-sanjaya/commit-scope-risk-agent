@@ -2,7 +2,7 @@
 {% set vq = ("&v=" ~ report.version) if pinned else "" %}
 {% set vq1 = ("?v=" ~ report.version) if pinned else "" %}
 <div class="toggle">
-  <a class="on" href="{{ base }}?tab=areas-list{{ vq }}" hx-get="{{ base }}/tab/areas-list{{ vq1 }}" hx-target="#tab-body">List</a><a href="{{ base }}?tab=areas-matrix{{ vq }}" hx-get="{{ base }}/tab/areas-matrix{{ vq1 }}" hx-target="#tab-body">Matrix</a>
+  <a class="on" href="{{ base }}?tab=areas-list{{ vq }}" hx-get="{{ base }}/tab/areas-list{{ vq1 }}" hx-target="#tabs" hx-swap="outerHTML" hx-push-url="{{ base }}?tab=areas-list{{ vq }}">List</a><a href="{{ base }}?tab=areas-matrix{{ vq }}" hx-get="{{ base }}/tab/areas-matrix{{ vq1 }}" hx-target="#tabs" hx-swap="outerHTML" hx-push-url="{{ base }}?tab=areas-matrix{{ vq }}">Matrix</a>
 </div>
 <div class="table-wrap">
 <table>

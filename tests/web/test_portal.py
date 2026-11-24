@@ -12,6 +12,32 @@ def client(**kw):
     return TestClient(app)
 
 
+def _highlighted_tabs(html: str) -> list[str]:
+    import re
+    nav = re.search(r'<nav class="tabs">(.*?)</nav>', html, re.S)
+    assert nav, "tab nav missing"
+    return re.findall(r'<a [^>]*class="on"[^>]*>([^<]+)</a>', nav.group(1))
+
+
+def test_tab_switch_moves_the_highlight():
+    """htmx swaps the response in; it must carry the nav so the clicked tab is highlighted."""
+    c = client()
+    for tab, label in [("tickets", "Tickets"), ("test-scope", "Test scope"), ("risks", "Risks"),
+                       ("history", "History"), ("areas-list", "Impacted areas"),
+                       ("areas-matrix", "Impacted areas")]:
+        partial = c.get(f"/portal/epics/PAY-100/tab/{tab}")
+        assert partial.status_code == 200
+        assert '<div id="tabs"' in partial.text and "<html" not in partial.text
+        assert _highlighted_tabs(partial.text) == [label], tab
+        assert _highlighted_tabs(c.get(f"/portal/epics/PAY-100?tab={tab}").text) == [label], tab
+
+
+def test_tab_links_swap_the_whole_tab_region():
+    page = client().get("/portal/epics/PAY-100").text
+    assert page.count('hx-target="#tabs"') >= 7  # five tabs + the List/Matrix toggle
+    assert 'hx-target="#tab-body"' not in page
+
+
 def test_portal_routes_render():
     c = client()
     home = c.get("/portal")

@@ -64,16 +64,19 @@ def build_router(queries: PortalQueries, user_dependency, clock: Clock = utcnow)
         rows = queries.epic_list(q or None, project or None, bool(high))
         return render("epic_list", rows=rows, q=q, project=project, high=bool(high))
 
+    def tab_body(ctx: dict) -> str:
+        return env.get_template(f"portal/_tab_{ctx['tab'].replace('-', '_')}.html.j2").render(**ctx)
+
     @router.get("/epics/{subject}", response_class=HTMLResponse)
     def epic(subject: str, tab: str = DEFAULT_TAB, v: int | None = None):
         ctx = tab_context(subject, tab, v)
-        body = env.get_template(f"portal/_tab_{tab.replace('-', '_')}.html.j2").render(**ctx)
-        return render("epic", body=body, **ctx)
+        return render("epic", body=tab_body(ctx), **ctx)
 
     @router.get("/epics/{subject}/tab/{tab}", response_class=HTMLResponse)
     def epic_tab(subject: str, tab: str, v: int | None = None):
+        """htmx partial: the tab nav and body together, so the swap also moves the highlight."""
         ctx = tab_context(subject, tab, v)
-        return HTMLResponse(env.get_template(f"portal/_tab_{tab.replace('-', '_')}.html.j2").render(**ctx))
+        return render("_tabs", body=tab_body(ctx), **ctx)
 
     @router.get("/epics/{subject}/cell", response_class=HTMLResponse)
     def cell(subject: str, area: str, ticket: str):

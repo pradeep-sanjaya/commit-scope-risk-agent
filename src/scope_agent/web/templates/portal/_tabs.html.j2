@@ -1,0 +1,14 @@
+{#- Tab nav + tab body. Rendered inside the Epic page and returned on its own by /tab/{tab}, so an htmx
+    tab switch replaces the nav too and the highlight follows the selected tab. -#}
+{% set base = "/portal/epics/" ~ (page.subject | urlencode) %}
+{% set vq = ("&v=" ~ report.version) if pinned else "" %}
+{% set vq1 = ("?v=" ~ report.version) if pinned else "" %}
+<div id="tabs">
+<nav class="tabs">
+{% for t, label, group in [("areas-list", "Impacted areas", ("areas-list", "areas-matrix")), ("tickets", "Tickets", ("tickets",)), ("test-scope", "Test scope", ("test-scope",)), ("risks", "Risks", ("risks",)), ("history", "History", ("history",))] %}
+  <a href="{{ base }}?tab={{ t }}{{ vq }}"{% if tab in group %} class="on" aria-current="page"{% endif %}
+     hx-get="{{ base }}/tab/{{ t }}{{ vq1 }}" hx-target="#tabs" hx-swap="outerHTML" hx-push-url="{{ base }}?tab={{ t }}{{ vq }}">{{ label }}</a>
+{% endfor %}
+</nav>
+<div id="tab-body">{{ body | safe }}</div>
+</div>

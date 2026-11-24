@@ -2,8 +2,6 @@
 {% from "portal/_macros.html.j2" import sev %}
 {% block title %}{{ page.subject }} · QA Impact Portal{% endblock %}
 {% block content %}
-{% set vq = ("&v=" ~ report.version) if pinned else "" %}
-{% set vq1 = ("?v=" ~ report.version) if pinned else "" %}
 <div class="crumb"><a href="/portal">Epics</a> › {{ page.subject }}</div>
 <h2>{{ page.subject }}{% if page.title != page.subject %} · {{ page.title }}{% endif %}</h2>
 <div class="strip">
@@ -19,11 +17,5 @@
 {% elif report.content.test_scope_status == "error" %}
 <div class="banner">Test scope could not be generated for this version; it will be retried.</div>
 {% endif %}
-<nav class="tabs">
-{% for t, label, group in [("areas-list", "Impacted areas", ("areas-list", "areas-matrix")), ("tickets", "Tickets", ("tickets",)), ("test-scope", "Test scope", ("test-scope",)), ("risks", "Risks", ("risks",)), ("history", "History", ("history",))] %}
-  <a href="/portal/epics/{{ page.subject | urlencode }}?tab={{ t }}{{ vq }}" class="{{ 'on' if tab in group }}"
-     hx-get="/portal/epics/{{ page.subject | urlencode }}/tab/{{ t }}{{ vq1 }}" hx-target="#tab-body" hx-push-url="/portal/epics/{{ page.subject | urlencode }}?tab={{ t }}{{ vq }}">{{ label }}</a>
-{% endfor %}
-</nav>
-<div id="tab-body">{{ body | safe }}</div>
+{% include "portal/_tabs.html.j2" %}
 {% endblock %}
