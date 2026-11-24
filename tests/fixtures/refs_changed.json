@@ -1,0 +1,18 @@
+{
+  "eventKey": "repo:refs_changed",
+  "date": "2026-11-23T10:00:00+0000",
+  "actor": {"name": "jdoe", "emailAddress": "jdoe@example.com", "displayName": "Jane Doe"},
+  "repository": {"slug": "payments-service", "project": {"key": "PAY"}},
+  "changes": [
+    {"ref": {"id": "refs/heads/development", "displayId": "development", "type": "BRANCH"},
+     "refId": "refs/heads/development", "fromHash": "aaa111", "toHash": "bbb222", "type": "UPDATE"},
+    {"ref": {"id": "refs/heads/release/1.4", "displayId": "release/1.4", "type": "BRANCH"},
+     "refId": "refs/heads/release/1.4", "fromHash": "0000000000000000000000000000000000000000", "toHash": "ccc333", "type": "ADD"},
+    {"ref": {"id": "refs/heads/hotfix/x", "displayId": "hotfix/x", "type": "BRANCH"},
+     "refId": "refs/heads/hotfix/x", "fromHash": "ddd444", "toHash": "0000000000000000000000000000000000000000", "type": "DELETE"},
+    {"ref": {"id": "refs/heads/feature/PAY-1", "displayId": "feature/PAY-1", "type": "BRANCH"},
+     "refId": "refs/heads/feature/PAY-1", "fromHash": "eee555", "toHash": "fff666", "type": "UPDATE"},
+    {"ref": {"id": "refs/tags/v1.4.0", "displayId": "v1.4.0", "type": "TAG"},
+     "refId": "refs/tags/v1.4.0", "fromHash": "0000000000000000000000000000000000000000", "toHash": "ggg777", "type": "ADD"}
+  ]
+}
