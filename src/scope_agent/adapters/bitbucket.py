@@ -2,6 +2,7 @@ import hashlib
 import hmac
 from datetime import datetime, timezone
 from fnmatch import fnmatchcase
+from urllib.parse import quote
 
 import httpx
 
@@ -65,7 +66,7 @@ class BitbucketClient:
     @staticmethod
     def _base(repo: str) -> str:
         project, slug = repo.split("/", 1)
-        return f"/rest/api/1.0/projects/{project}/repos/{slug}"
+        return f"/rest/api/1.0/projects/{quote(project, safe='')}/repos/{quote(slug, safe='')}"
 
     def _get_json(self, url: str, params: dict | None = None) -> dict:
         response = self._http.get(url, params=params)
@@ -82,7 +83,7 @@ class BitbucketClient:
             start = page["nextPageStart"]
 
     def _raw(self, repo: str, path: str, at: str) -> bytes | None:
-        response = self._http.get(f"{self._base(repo)}/raw/{path}", params={"at": at})
+        response = self._http.get(f"{self._base(repo)}/raw/{quote(path, safe='/')}", params={"at": at})
         if response.status_code == 404:
             return None
         response.raise_for_status()
@@ -104,13 +105,13 @@ class BitbucketClient:
 
     def get_commit(self, repo: str, sha: str) -> CommitData:
         base = self._base(repo)
-        meta = self._get_json(f"{base}/commits/{sha}")
+        meta = self._get_json(f"{base}/commits/{quote(sha, safe='')}")
         parents = [p["id"] for p in meta.get("parents", [])]
         author = meta.get("author") or {}
         committed_at = datetime.fromtimestamp(meta["committerTimestamp"] / 1000, tz=timezone.utc)
         files = [
             self._file_change(repo, sha, parents, change)
-            for change in self._paged(f"{base}/commits/{sha}/changes")
+            for change in self._paged(f"{base}/commits/{quote(sha, safe='')}/changes")
         ]
         return CommitData(
             repo=repo,

@@ -172,3 +172,13 @@ def test_default_head_tags_and_messages(client):
     assert client.commit_messages_between("PAY/svc", "v1", "v2") == ["m1", "m2"]
     p = route.calls[0].request.url.params
     assert p["since"] == "v1" and p["until"] == "v2"
+
+
+@respx.mock
+def test_get_file_encodes_special_path_characters(client):
+    route = respx.get(host="bb.test").mock(return_value=httpx.Response(200, text="hi"))
+    assert client.get_file("PAY/svc", "docs/a b#c?d%41.md", "main") == "hi"
+    req = route.calls[0].request
+    assert req.url.raw_path == (
+        b"/rest/api/1.0/projects/PAY/repos/svc/raw/docs/a%20b%23c%3Fd%2541.md?at=main"
+    )
