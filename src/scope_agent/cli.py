@@ -10,8 +10,10 @@ import typer
 import uvicorn
 
 from scope_agent.composition import Container, build_container
+from scope_agent.demo import seed_demo as seed_demo_data
 from scope_agent.domain.models import PushJob
 from scope_agent.logging import configure_logging
+from scope_agent.persistence.database import utcnow
 from scope_agent.settings import Settings, load_settings
 from scope_agent.web.app import create_app
 
@@ -66,6 +68,17 @@ def migrate() -> None:
     _, c = _boot()
     c.db.create_all()
     log.info("migrated")
+
+
+@app.command("seed-demo")
+def seed_demo() -> None:
+    """Load demo data (DEMO-* keys) so the portal has something to show. Local/demo databases only."""
+    _, c = _boot()
+    c.db.create_all()
+    if seed_demo_data(c.db, utcnow()):
+        log.info("demo_seeded", portal=f"{c.settings.public_base_url.rstrip('/')}/portal")
+    else:
+        log.info("demo_already_seeded")
 
 
 def _analyze_commit(c: Container, repo: str, sha: str, branch: str, send_email: bool):

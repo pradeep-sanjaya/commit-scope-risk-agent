@@ -18,6 +18,7 @@ One image, one entrypoint (`scope-agent`), several process types. All configurat
 | `scope-agent analyze PAY/repo <sha> [--send-email] [--json]` | Analyze one commit on demand. |
 | `scope-agent backtest PAY/repo --branch development --limit 200 [--no-send-email]` | Replay recent commits. |
 | `scope-agent report` | Useful-rate per type and severity; high+medium against the 70% target. |
+| `scope-agent seed-demo` | Loads demo data (`DEMO-*` keys) into the portal. Local/demo databases only. |
 
 A missing or invalid setting exits with status 2 and names the variable. Logs are JSON lines on stdout.
 
@@ -33,6 +34,26 @@ curl -fsS localhost:8080/healthz
 
 Compose also starts Postgres 16 and Mailpit (mail UI on http://localhost:8025). Without Docker:
 `uv sync && uv run scope-agent migrate`.
+
+### Portal demo data
+
+To try the portal without Bitbucket, JIRA or an LLM, load the demo data and open
+http://localhost:8080/portal:
+
+```
+docker compose run --rm web seed-demo
+docker compose up -d web
+```
+
+`.env` still needs every required variable, but placeholder values work: the command makes no network calls
+and queues no jobs. It creates the schema if needed and does nothing when the demo data is already there.
+The data covers every portal state: an Epic with two report versions, overlapping tickets and findings of
+each severity (`DEMO-100`), an Epic whose test scope is waiting for LLM budget (`DEMO-200`), an Epic whose
+report has not been built yet (`DEMO-300`), a ticket without an Epic and a commit without a ticket.
+
+Demo ticket titles are cached without expiry, and demo findings are dated 2000-01-01 so they never reach a
+digest. All keys use the `DEMO` project. Even so, seed only local or demo databases; `docker compose down -v`
+removes it all.
 
 ## Data files
 
