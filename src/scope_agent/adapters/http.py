@@ -36,6 +36,7 @@ def build_http_client(
     timeout: float,
     auth: httpx.Auth | None = None,
     headers: dict | None = None,
+    follow_redirects: bool = False,
     sleep: Callable[[float], None] = time.sleep,
 ) -> httpx.Client:
     return httpx.Client(
@@ -43,5 +44,6 @@ def build_http_client(
         timeout=timeout,
         auth=auth,
         headers=headers,
+        follow_redirects=follow_redirects,
         transport=RetryTransport(httpx.HTTPTransport(), sleep=sleep),
     )

@@ -1,0 +1,47 @@
+# Local stack. Copy .env.example to .env and fill it in first.
+x-app: &app
+  build: .
+  env_file: .env
+  volumes:
+    - ./deploy:/config:ro
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: scope
+      POSTGRES_PASSWORD: scope
+      POSTGRES_DB: scope
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scope -d scope"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  mailpit:
+    image: axllent/mailpit:v1.21
+    ports:
+      - "8025:8025"
+
+  migrate:
+    <<: *app
+    command: ["migrate"]
+    restart: "no"
+
+  web:
+    <<: *app
+    command: ["web"]
+    ports:
+      - "${PORT:-8080}:8080"
+
+  worker:
+    <<: *app
+    command: ["worker"]
+
+volumes:
+  pgdata:

@@ -40,3 +40,9 @@ def test_headers_and_base_url_applied():
     assert client.headers["Authorization"] == "Bearer t"
     assert str(client.base_url).startswith("https://x.test")
     assert isinstance(client._transport, RetryTransport)
+
+
+def test_build_http_client_follow_redirects_flag():
+    from scope_agent.adapters.http import build_http_client
+    assert build_http_client("https://x.test", 5, follow_redirects=True).follow_redirects is True
+    assert build_http_client("https://x.test", 5).follow_redirects is False

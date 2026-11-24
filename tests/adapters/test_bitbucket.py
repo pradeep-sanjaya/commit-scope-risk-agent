@@ -187,3 +187,12 @@ def test_get_file_encodes_special_path_characters(client):
 def test_verify_signature_non_ascii_header_is_false():
     from scope_agent.adapters.bitbucket import verify_signature
     assert verify_signature("s", b"{}", "sha256=é✓") is False
+
+
+@respx.mock
+def test_recent_commits_oldest_first_and_limited(client):
+    route = respx.get(f"{API}/commits").respond(
+        json={"values": [{"id": "c3"}, {"id": "c2"}, {"id": "c1"}], "isLastPage": True}
+    )
+    assert client.recent_commits("PAY/svc", "development", 2) == ["c2", "c3"]
+    assert route.calls[0].request.url.params["until"] == "development"

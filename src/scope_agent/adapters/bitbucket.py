@@ -103,6 +103,15 @@ class BitbucketClient:
                 break
         return list(reversed(shas))  # API is newest-first; keep newest `limit`, return oldest-first
 
+    def recent_commits(self, repo: str, branch: str, limit: int) -> list[str]:
+        """Newest `limit` commit ids reachable from `branch`, oldest first."""
+        shas: list[str] = []
+        for commit in self._paged(f"{self._base(repo)}/commits", {"until": branch}):
+            shas.append(commit["id"])
+            if len(shas) >= limit:
+                break
+        return list(reversed(shas))
+
     def get_commit(self, repo: str, sha: str) -> CommitData:
         base = self._base(repo)
         meta = self._get_json(f"{base}/commits/{quote(sha, safe='')}")
