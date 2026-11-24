@@ -80,3 +80,36 @@ def test_epic_list_carries_test_scope_status():
     rows = seed(status="pending")[0].epic_list(None, None, False)
     assert rows[0].subject == "PAY-100" and rows[0].test_scope_status == "pending"
     assert rows[-1].test_scope_status is None  # synthetic row
+
+
+def test_ticket_list_rows_newest_first_only_tickets_with_commits():
+    q, _, resolver = seed()
+    resolver.calls.clear()
+    rows = q.ticket_list(None, None, False)
+    assert [r.key for r in rows] == ["PAY-7", "PAY-102", "PAY-103", "PAY-101"]  # PAY-104 has no commits
+    pay101 = rows[-1]
+    assert (pay101.summary, pay101.status, pay101.assignee, pay101.epic_key) == (
+        "summary PAY-101", "In QA", "Asha", "PAY-100")
+    assert (pay101.commits, pay101.repos, pay101.area_names) == (2, 1, ["Feature flags", "Gateway / Envoy"])
+    assert pay101.severity == "high" and pay101.last_change is not None
+    assert rows[0].epic_key is None and rows[0].summary == "summary PAY-7"
+    assert resolver.calls == ["PAY-7"]  # Epic tickets come from the stored report, not JIRA
+
+
+def test_ticket_list_filters():
+    q, _, _ = seed()
+    assert [r.key for r in q.ticket_list("gateway", None, False)] == ["PAY-101"]  # area name
+    assert [r.key for r in q.ticket_list("summary pay-103", None, False)] == ["PAY-103"]
+    assert [r.key for r in q.ticket_list("pay-100", None, False)] == ["PAY-102", "PAY-103", "PAY-101"]  # Epic
+    assert [r.key for r in q.ticket_list(None, None, True)] == ["PAY-101"]
+    assert q.ticket_list(None, "OTHER", False) == []
+
+
+def test_ticket_list_survives_jira_outage():
+    q, _, resolver = seed()
+
+    def down(key):
+        raise RuntimeError("jira down")
+    resolver.resolve = down
+    row = next(r for r in q.ticket_list(None, None, False) if r.key == "PAY-7")
+    assert row.summary == "" and row.status == ""

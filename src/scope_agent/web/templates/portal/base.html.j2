@@ -18,8 +18,10 @@
     </svg>
     <span>QA Impact</span>
   </a>
+  {% set current = section | default("epics") %}
   <nav class="topnav" aria-label="Sections">
-    <a href="/portal" aria-current="page">Epics</a>
+    <a href="/portal"{% if current == "epics" %} aria-current="page"{% endif %}>Epics</a>
+    <a href="/portal/tickets"{% if current == "tickets" %} aria-current="page"{% endif %}>Tickets</a>
   </nav>
   <form class="topsearch" role="search" method="get" action="/portal/search">
     <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>

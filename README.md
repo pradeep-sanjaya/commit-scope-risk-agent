@@ -170,6 +170,9 @@ The `web` process serves a read-only portal at `{SCOPE_PUBLIC_BASE_URL}/portal`:
 - `/portal/epics/{subject}`: the latest consolidated Epic impact report, with tabs for impacted areas (list
   and ticket × area matrix), tickets, test scope, risks and version history. `?v=N` shows an older version, and
   `?tab=` opens a tab without JavaScript.
+- `/portal/tickets`: every ticket with recorded commits, newest change first, with its Epic, commit count,
+  impacted areas and highest risk. Same filters as the Epic list. Summaries come from the stored Epic reports,
+  so the page makes no JIRA call except for tickets outside an Epic.
 - `/portal/tickets/{key}`: one ticket's areas, findings and commits, newest first.
 
 Push emails link each finding's ticket page and its Epic page, and the digest links each Epic group.

@@ -1,0 +1,44 @@
+{% extends "portal/base.html.j2" %}
+{% from "portal/_macros.html.j2" import sev, key, chip %}
+{% block title %}Tickets · QA Impact Portal{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Tickets</h1>
+  <p class="lead">Every ticket with recorded commits, newest change first.</p>
+</div>
+<form class="filters" method="get" action="/portal/tickets">
+  <input type="search" name="q" value="{{ q }}" placeholder="Search ticket, summary, Epic, area or repo…" aria-label="Search tickets">
+  <select name="project" aria-label="Project">
+    <option value="">All projects</option>
+    {% for p in projects %}<option value="{{ p }}"{% if p == project %} selected{% endif %}>{{ p }}</option>{% endfor %}
+  </select>
+  <label class="check"><input type="checkbox" name="high" value="1"{% if high %} checked{% endif %}> High risk only</label>
+  <button type="submit" class="btn btn-primary">Filter</button>
+</form>
+<div class="card">
+<div class="table-wrap">
+<table>
+<thead>
+<tr><th>Ticket</th><th>Summary</th><th>Status</th><th>Epic</th><th class="num">Commits</th><th>Impacted areas</th><th>Risk</th><th>Last change</th></tr>
+</thead>
+<tbody>
+{% for r in rows %}
+<tr class="row">
+  <td>{{ key(r.key) }}</td>
+  <td>{% if r.summary %}<span class="cell-title">{{ r.summary }}</span>{% else %}<span class="muted">Not available from JIRA</span>{% endif %}
+    {% if r.assignee %}<div class="sub">{{ r.assignee }}</div>{% endif %}</td>
+  <td>{{ chip(r.status) if r.status else "–" }}</td>
+  <td>{% if r.epic_key %}<a class="key" href="/portal/epics/{{ r.epic_key | urlencode }}">{{ r.epic_key }}</a>{% else %}<span class="muted">–</span>{% endif %}</td>
+  <td class="num">{{ r.commits }}{% if r.repos > 1 %} <span class="sub">· {{ r.repos }} repos</span>{% endif %}</td>
+  <td>{% for a in r.area_names %}{{ chip(a) }}{% endfor %}</td>
+  <td>{{ sev(r.severity) }}</td>
+  <td style="white-space: nowrap">{{ r.last_change | ago }}</td>
+</tr>
+{% else %}
+<tr><td colspan="8" class="empty">No tickets match these filters.</td></tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+</div>
+{% endblock %}

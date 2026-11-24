@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from scope_agent.domain.epic_report import developer
 from scope_agent.domain.impact import ImpactRecord
-from scope_agent.domain.models import Finding, Severity, TicketContext
+from scope_agent.domain.models import EpicTicket, Finding, Severity, TicketContext
 from scope_agent.persistence.findings import FindingRepository
 from scope_agent.persistence.impact import ImpactRepository
 from scope_agent.persistence.reports import ReportRepository, StoredReport, StoredReportMeta
@@ -34,6 +34,19 @@ class EpicListRow(BaseModel):
     new_commits_since_prev: int
     report_pending: bool = False  # records exist but no report has been built yet (or its job failed)
     test_scope_status: str | None = None  # latest report's: "ok", "pending" (LLM budget) or "error"
+
+
+class TicketListRow(BaseModel):
+    key: str
+    summary: str
+    status: str
+    assignee: str | None
+    epic_key: str | None
+    commits: int
+    repos: int
+    area_names: list[str]
+    severity: str | None  # highest across the ticket's commits
+    last_change: datetime | None
 
 
 class EpicPage(BaseModel):
@@ -160,6 +173,52 @@ class PortalQueries:
         ids = dict.fromkeys(f for r in self._records.for_subject(subject) for f in r.finding_ids)
         found = [f for fid in ids if (f := self._findings.get(fid))]
         return sorted(found, key=lambda f: -f.severity.rank)
+
+    def ticket_list(self, query: str | None, project: str | None, high_only: bool) -> list[TicketListRow]:
+        """Tickets that have recorded commits, newest change first. Summary, status and assignee come from
+        the stored Epic reports; only tickets outside any report are looked up (JIRA failures leave them blank)."""
+        known: dict[str, EpicTicket] = {}
+        by_ticket: dict[str, list[ImpactRecord]] = {}
+        for subject in self._records.subjects():
+            if subject.startswith(UNASSIGNED_PREFIX):
+                continue
+            report = self._reports.latest(subject)
+            if report is not None:
+                known.update({t.key: t for t in report.content.aggregate.tickets})
+            for r in self._records.for_subject(subject):
+                for k in r.jira_keys:
+                    by_ticket.setdefault(k, []).append(r)
+        rows: list[TicketListRow] = []
+        for key, recs in by_ticket.items():
+            if project and key.split("-")[0] != project:
+                continue
+            summary, status, assignee = self._ticket_details(key, known)
+            worst = max((r.max_severity for r in recs if r.max_severity), key=lambda s: s.rank, default=None)
+            areas = list(dict.fromkeys(a for r in sorted(recs, key=lambda r: r.committed_at) for a in r.areas))
+            epic = next((r.epic_key for r in recs if r.epic_key), None)
+            row = TicketListRow(
+                key=key, summary=summary, status=status, assignee=assignee, epic_key=epic,
+                commits=len({(r.repo, r.commit) for r in recs}), repos=len({r.repo for r in recs}),
+                area_names=areas, severity=worst.value if worst else None,
+                last_change=max(r.committed_at for r in recs),
+            )
+            if high_only and row.severity != "high":
+                continue
+            if query and not _matches(query, key, summary, epic or "", *areas, *{r.repo for r in recs}):
+                continue
+            rows.append(row)
+        return sorted(rows, key=lambda r: (r.last_change is not None, r.last_change), reverse=True)
+
+    def _ticket_details(self, key: str, known: dict[str, EpicTicket]) -> tuple[str, str, str | None]:
+        if key in known:
+            t = known[key]
+            return t.summary, t.status, t.assignee
+        try:
+            ctx = self._tickets.resolve(key)
+        except Exception as exc:  # JIRA being down must not take the page down
+            log.warning("portal_ticket_unavailable", key=key, error=str(exc))
+            ctx = None
+        return (ctx.summary, ctx.status, None) if ctx else ("", "", None)
 
     def projects(self) -> list[str]:
         """JIRA project keys that have recorded work, for the Epic list's project filter."""

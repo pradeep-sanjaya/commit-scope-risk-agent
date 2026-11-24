@@ -97,11 +97,17 @@ def build_router(queries: PortalQueries, user_dependency, clock: Clock = utcnow)
         return render("_matrix_cell", subject=subject, area=area, ticket=ticket,
                       records=queries.matrix_cell(subject, area, ticket))
 
+    @router.get("/tickets", response_class=HTMLResponse)
+    def ticket_list(q: str = "", project: str = "", high: str = ""):
+        rows = queries.ticket_list(q or None, project or None, bool(high))
+        return render("ticket_list", rows=rows, q=q, project=project, high=bool(high),
+                      projects=queries.projects(), section="tickets")
+
     @router.get("/tickets/{key}", response_class=HTMLResponse)
     def ticket(key: str, request: Request):
         page = queries.ticket_page(key)
         if page is None:
             raise HTTPException(404, "unknown ticket")
-        return render("ticket", page=page)
+        return render("ticket", page=page, section="tickets")
 
     return router

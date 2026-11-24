@@ -6,8 +6,33 @@ from scope_agent.web.portal import TABS
 from tests.web.test_portal import client
 
 HTMX_SHA384 = "ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2"
-PAGES = ["/portal", "/portal/epics/PAY-100", "/portal/tickets/PAY-101",
+PAGES = ["/portal", "/portal/epics/PAY-100", "/portal/tickets", "/portal/tickets/PAY-101",
          *[f"/portal/epics/PAY-100?tab={t}" for t in TABS]]
+
+
+def _current_section(html: str) -> list[str]:
+    return re.findall(r'<a [^>]*aria-current="page"[^>]*>([^<]+)</a>', html.split("</nav>")[0])
+
+
+def test_top_nav_marks_the_current_section():
+    c = client()
+    assert _current_section(c.get("/portal").text) == ["Epics"]
+    assert _current_section(c.get("/portal/epics/PAY-100").text) == ["Epics"]
+    assert _current_section(c.get("/portal/tickets").text) == ["Tickets"]
+    assert _current_section(c.get("/portal/tickets/PAY-101").text) == ["Tickets"]
+
+
+def test_tickets_page_lists_tickets_with_commits():
+    c = client()
+    html = c.get("/portal/tickets").text
+    keys = re.findall(r'<a class="key" href="/portal/tickets/([A-Z0-9-]+)"', html)
+    assert keys == ["PAY-7", "PAY-102", "PAY-103", "PAY-101"]
+    assert "summary PAY-101" in html and 'href="/portal/epics/PAY-100"' in html
+    assert 'class="badge b-high"' in html and 'class="chip">Gateway / Envoy<' in html
+    assert '<select name="project"' in html and "High risk only" in html
+    filtered = c.get("/portal/tickets", params={"high": "1"}).text
+    assert re.findall(r'<a class="key" href="/portal/tickets/([A-Z0-9-]+)"', filtered) == ["PAY-101"]
+    assert "No tickets match these filters." in c.get("/portal/tickets", params={"q": "zzz"}).text
 
 
 def test_pages_load_nothing_external():
