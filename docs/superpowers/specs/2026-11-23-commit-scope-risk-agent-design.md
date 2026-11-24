@@ -111,9 +111,46 @@ Bitbucket DC ──(repo:refs_changed webhook, HMAC-signed)──▶  Webhook re
 
 **Tech choices (builder's call, proposed):** Python 3.12, FastAPI for the webhook
 receiver, a DB-backed job table with a background worker (survives restarts),
-SQLite for the POC (Postgres-ready via SQLAlchemy), APScheduler for the digest,
-SMTP for email, Jinja2 templates for email bodies. Anthropic Claude as the hosted
-LLM for the POC (model configurable; default a current Sonnet-class model).
+**PostgreSQL** as the backing store (SQLite only for tests and local dev), SMTP for
+email, Jinja2 templates for email bodies. Anthropic Claude as the hosted LLM for the
+POC (model configurable; default a current Sonnet-class model).
+
+### 5.1 Twelve-factor and single-responsibility rules (decided by user)
+- **Config:** *all* configuration comes from environment variables (`SCOPE_*`), with
+  nothing hard-coded and no config file baked into the image. Larger structured data
+  is kept in files **whose paths come from env vars**, mounted at deploy time (for
+  example a ConfigMap):
+  - routing (who gets notified)
+  - dependency hints (doc URLs, in-house library → repo mapping, known swaps)
+
+  Every setting is documented in `.env.example`.
+- **Backing services** are attached via URLs or credentials in env: the database
+  (`SCOPE_DATABASE_URL`), SMTP, the LLM endpoint, Bitbucket, JIRA, Nexus and GitHub.
+  Swapping hosted → local LLM is an env change.
+- **Process types:**
+  - `web` (webhook + rating links, binds `$PORT`)
+  - `worker` (analysis; horizontally scalable, jobs claimed with
+    `FOR UPDATE SKIP LOCKED`)
+  - `digest` (a one-off admin process run by the platform's scheduler, e.g. a
+    K8s CronJob or cron)
+
+  There's no in-process scheduler.
+- **Stateless and disposable processes:** all state lives in the database. Workers
+  finish or release their job on SIGTERM. A job left `running` by a crashed worker
+  is reclaimed after a lease timeout.
+- **Logs:** structured JSON to stdout only.
+- **Build, release, run:** one container image. A release is image + env.
+- **Admin processes:** `migrate`, `analyze`, `backtest`, `report` and `digest` run as
+  one-off commands from the same image.
+- **Dev/prod parity:** docker-compose with Postgres and a local SMTP catcher.
+- **Single responsibility:** each module has one reason to change.
+  - Integrations (Bitbucket, JIRA, Nexus, GitHub, LLM, SMTP) are thin adapters with
+    no business rules.
+  - Business rules (swap detection, gap detection, severity, routing) are pure
+    functions or classes with no I/O.
+  - Orchestration (pipeline, worker, notifier) only wires them together.
+  - Persistence is split into one repository per aggregate.
+  - Objects are built in a single composition root.
 
 ## 6. Behavior
 
@@ -259,10 +296,14 @@ output is retried once, then the analysis is recorded as an error.
 - Tone: neutral, "for review"; each email has a short "why this was flagged" line.
 
 ### 6.8 Configuration and secrets
-Environment variables or a secrets file for: Bitbucket token, webhook secret, JIRA
-credentials, LLM API key, GitHub token (release-notes rate limits), SMTP. YAML for:
-routing, JIRA field mappings, project keys, file globs, severities, digest time,
-model name.
+All configuration comes from environment variables (see §5.1):
+- secrets: Bitbucket token, webhook secret, JIRA credentials, LLM API key, GitHub
+  token, Nexus credentials, SMTP credentials, rating-link secret
+- settings: branches, JIRA project keys and AC field mapping, file globs, model and
+  token budget, timezone, retry, lease and timeout values
+- paths to the two mounted data files: routing, and dependency hints
+
+The digest time is set by the platform scheduler that runs the `digest` process.
 
 ### 6.9 LLM interface
 `LLMClient.analyze(prompt, schema) -> dict`, with a Claude implementation for the
