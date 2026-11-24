@@ -1,6 +1,14 @@
+{#- Shared building blocks; classes are defined in static/portal.css. -#}
 {% macro sev(value, label=None) -%}
-{%- if value %}<span class="{{ value | sev_class }}">{{ label if label is not none else (value | sev_value) }}</span>{% endif -%}
+{%- if value %}<span class="badge {{ value | sev_class }}">{{ label if label is not none else (value | sev_value | capitalize) }}</span>{% endif -%}
 {%- endmacro %}
-{% macro ticket_link(key) -%}
-<a href="/portal/tickets/{{ key | urlencode }}">{{ key }}</a>
+{% macro key(k) -%}
+<a class="key" href="/portal/tickets/{{ k | urlencode }}">{{ k }}</a>
+{%- endmacro %}
+{% macro ticket_link(k) -%}{{ key(k) }}{%- endmacro %}
+{% macro chip(text) -%}
+<span class="chip">{{ text }}</span>
+{%- endmacro %}
+{% macro new_tag(version, what="new") -%}
+<span class="new-badge">{{ what }} in v{{ version }}</span>
 {%- endmacro %}

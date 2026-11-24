@@ -14,7 +14,7 @@ from scope_agent.services.portal_queries import PortalQueries
 TABS = ("areas-list", "areas-matrix", "tickets", "test-scope", "risks", "history")
 DEFAULT_TAB = "areas-list"
 _TICKET_KEY = re.compile(r"[A-Z][A-Z0-9]+-\d+")
-SEVERITY_CLASS = {"high": "sev-h", "medium": "sev-m", "low": "sev-l", "info": "sev-l"}
+SEVERITY_CLASS = {"high": "b-high", "medium": "b-medium", "low": "b-low", "info": "b-low"}
 
 
 def _ago_filter(clock: Clock):
@@ -38,7 +38,7 @@ def _environment(clock: Clock) -> Environment:
         undefined=StrictUndefined, trim_blocks=True, lstrip_blocks=True,
     )
     env.filters["ago"] = _ago_filter(clock)
-    env.filters["sev_class"] = lambda sev: SEVERITY_CLASS.get(getattr(sev, "value", sev) or "", "sev-l")
+    env.filters["sev_class"] = lambda sev: SEVERITY_CLASS.get(getattr(sev, "value", sev) or "", "b-low")
     env.filters["sev_value"] = lambda sev: getattr(sev, "value", sev) or ""
     return env
 
