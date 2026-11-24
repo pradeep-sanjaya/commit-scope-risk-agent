@@ -27,7 +27,11 @@ class PushJobHandler:
 
     def handle(self, job_id: int, payload: dict) -> None:
         result = self._pipeline.run(job_id, PushJob.model_validate(payload))
-        self._after_push(result)
+        try:
+            self._after_push(result)
+        except Exception as exc:
+            # Commits are already analyzed; a retry would skip them and lose the email too.
+            log.error("after_push_failed", job_id=job_id, error=str(exc))
         try:
             self._notifier.notify(result)
         except Exception as exc:

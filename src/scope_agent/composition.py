@@ -14,7 +14,8 @@ from scope_agent.adapters.jira import JiraClient
 from scope_agent.adapters.nexus import NexusClient
 from scope_agent.adapters.smtp import EmailSender, SmtpSender
 from scope_agent.adapters.web_pages import WebPageFetcher
-from scope_agent.config_files import load_dependency_hints, load_routing
+from scope_agent.config_files import load_areas, load_dependency_hints, load_routing
+from scope_agent.domain.areas import AreaMap
 from scope_agent.domain.dependency_hints import DependencyHints
 from scope_agent.domain.routing import RoutingConfig
 from scope_agent.llm.base import LLMClient
@@ -24,6 +25,7 @@ from scope_agent.persistence.cache import KeyValueCache
 from scope_agent.persistence.commits import CommitLedger
 from scope_agent.persistence.database import Database, utcnow
 from scope_agent.persistence.findings import FindingRepository
+from scope_agent.persistence.impact import ImpactRepository
 from scope_agent.persistence.jobs import JobQueue
 from scope_agent.persistence.meta import MetaStore
 from scope_agent.persistence.ratings import RatingRepository
@@ -31,6 +33,7 @@ from scope_agent.persistence.usage import TokenUsageMeter
 from scope_agent.services.code_analysis import CodeAnalyzer
 from scope_agent.services.dependency_analysis import DependencyAnalyzer
 from scope_agent.services.digest import DigestService
+from scope_agent.services.impact_recorder import ImpactRecorder
 from scope_agent.services.library_docs import LibraryDocsService
 from scope_agent.services.library_profile import LibraryProfileBuilder
 from scope_agent.services.pipeline import PushPipeline
@@ -52,9 +55,11 @@ class Container:
     settings: Settings
     routing: RoutingConfig
     hints: DependencyHints
+    area_map: AreaMap
     db: Database
     jobs: JobQueue
     findings: FindingRepository
+    impact: ImpactRepository
     ratings: RatingRepository
     ledger: CommitLedger
     meta: MetaStore
@@ -76,9 +81,11 @@ def build_container(settings: Settings) -> Container:
     log.info("startup_config", **config)
     routing = load_routing(s.routing_file)
     hints = load_dependency_hints(s.dependency_hints_file)
+    area_map = load_areas(s.areas_file)
 
     db = Database(s.database_url)
     jobs, findings, ratings = JobQueue(db), FindingRepository(db), RatingRepository(db)
+    impact = ImpactRepository(db)
     ledger, meta, cache = CommitLedger(db), MetaStore(db), KeyValueCache(db)
     llm = build_llm(s, TokenUsageMeter(db))
 
@@ -123,13 +130,15 @@ def build_container(settings: Settings) -> Container:
         bitbucket, tickets, deps, code, db, findings, ledger, s.jira_project_keys, s.max_commits_per_push,
     )
     notifier = PushNotifier(routing, sender, links)
+    recorder = ImpactRecorder(impact, jobs, area_map, s.files_priority, s.report_debounce_seconds, utcnow)
     worker = Worker(
-        jobs, {"push": PushJobHandler(pipeline, notifier)}, findings,
+        jobs, {"push": PushJobHandler(pipeline, notifier, recorder)}, findings,
         RetryPolicy(s.retry_backoff_seconds), s.job_lease_seconds, s.timezone, utcnow,
     )
     digest = DigestService(findings, jobs, meta, sender, links, s.digest_recipients, utcnow)
     return Container(
-        settings=s, routing=routing, hints=hints, db=db, jobs=jobs, findings=findings, ratings=ratings,
+        settings=s, routing=routing, hints=hints, area_map=area_map, db=db, jobs=jobs, findings=findings,
+        impact=impact, ratings=ratings,
         ledger=ledger, meta=meta, sender=sender, links=links, llm=llm, bitbucket=bitbucket,
         pipeline=pipeline, notifier=notifier, digest=digest, worker=worker,
     )

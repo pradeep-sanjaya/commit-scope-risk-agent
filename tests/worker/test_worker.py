@@ -163,3 +163,22 @@ def test_worker_email_failure_still_completes(env):
     worker(env, {"push": handler}).run_once()
     assert row(db, jid).status == "done"
     assert pipeline.ran == [(jid, job)] and len(after) == 1
+
+
+def test_after_push_failure_does_not_fail_job_and_still_notifies(env):
+    db, clock, q, _ = env
+    job = PushJob(repo="P/r", branch="development", from_hash=None, to_hash="abc", pushed_by=None)
+    jid = q.enqueue("push", job.model_dump(mode="json"), "k")
+    notified = []
+
+    class Notifier:
+        def notify(self, result):
+            notified.append(result)
+
+    def boom(result):
+        raise RuntimeError("impact down")
+
+    with capture_logs() as logs:
+        worker(env, {"push": PushJobHandler(FakePipeline(), Notifier(), boom)}).run_once()
+    assert row(db, jid).status == "done" and len(notified) == 1
+    assert any(e["event"] == "after_push_failed" and e["job_id"] == jid and "impact down" in e["error"] for e in logs)

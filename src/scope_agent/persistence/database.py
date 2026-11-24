@@ -129,6 +129,26 @@ meta = Table(
     Column("value", Text, nullable=False),
 )
 
+impact_records = Table(
+    "impact_records", metadata,
+    Column("repo", String(256), primary_key=True),
+    Column("commit", String(64), primary_key=True),
+    Column("subject", String(256), nullable=False, index=True),
+    Column("epic_key", String(64), index=True),
+    Column("author_name", String(256), nullable=False),
+    Column("author_email", String(320)),
+    Column("committed_at", UTCDateTime, nullable=False),
+    Column("max_severity", String(16)),
+    Column("data", JSON, nullable=False),
+)
+
+impact_areas = Table(
+    "impact_areas", metadata,
+    Column("repo", String(256), primary_key=True),
+    Column("commit", String(64), primary_key=True),
+    Column("area", String(256), primary_key=True, index=True),
+)
+
 
 class Database:
     def __init__(self, url: str):
