@@ -1,12 +1,20 @@
+{% from "portal/_macros.html.j2" import chip %}
+<div class="card">
 <div class="table-wrap">
 <table>
-<tr><th>Version</th><th>Created</th><th>Commits recorded</th><th>Changes since previous</th></tr>
+<thead><tr><th>Version</th><th>Created</th><th class="num">Commits</th><th>Changes since previous</th></tr></thead>
+<tbody>
 {% for v in page.versions | reverse %}
 <tr>
-  <td><a href="/portal/epics/{{ page.subject | urlencode }}?tab=history&amp;v={{ v.version }}">v{{ v.version }}</a>{% if v.version == report.version %} <span class="muted">(viewing)</span>{% endif %}</td>
-  <td>{{ v.created_at.strftime("%Y-%m-%d %H:%M") }}</td><td>{{ v.record_count }}</td>
-  <td>+{{ v.diff.new_commits }} commits{% if v.diff.new_areas %}, new areas: {{ v.diff.new_areas | join(", ") }}{% endif %}{% if v.diff.new_overlaps %}, new overlaps: {{ v.diff.new_overlaps | join(", ") }}{% endif %}{% if v.diff.new_test_items %}, {{ v.diff.new_test_items | length }} new test item(s){% endif %}</td>
+  <td><a href="/portal/epics/{{ page.subject | urlencode }}?tab=history&amp;v={{ v.version }}"><b>v{{ v.version }}</b></a>{% if v.version == report.version %}<span class="state state-pending">Viewing</span>{% endif %}</td>
+  <td class="muted">{{ v.created_at.strftime("%Y-%m-%d %H:%M") }}</td><td class="num">{{ v.record_count }}</td>
+  <td><span class="new">+{{ v.diff.new_commits }} commits</span>
+    {% for a in v.diff.new_areas %}{{ chip("new area: " ~ a) }}{% endfor %}
+    {% for a in v.diff.new_overlaps %}{{ chip("new overlap: " ~ a) }}{% endfor %}
+    {% if v.diff.new_test_items %}{{ chip(v.diff.new_test_items | length ~ " new test item(s)") }}{% endif %}</td>
 </tr>
 {% endfor %}
+</tbody>
 </table>
+</div>
 </div>

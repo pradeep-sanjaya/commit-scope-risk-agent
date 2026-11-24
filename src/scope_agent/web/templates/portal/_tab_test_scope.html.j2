@@ -1,24 +1,26 @@
+{% from "portal/_macros.html.j2" import key, chip, new_tag %}
 {% set items = report.content.test_scope or [] %}
 {% set fresh = diff.new_test_items | map(attribute="what") | list %}
-{% if report.content.test_scope_status == "pending" and not items %}
-<p class="muted">Test scope pending (LLM budget).</p>
-{% else %}
+<div class="card">
+{% if diff.new_test_items %}
+<div class="toolbar"><span class="new">New in v{{ report.version }}: {{ diff.new_test_items | length }} test item{{ "s" if diff.new_test_items | length != 1 }}</span>
+  <span class="hint">Highlighted rows span several tickets.</span></div>
+{% endif %}
 <div class="table-wrap">
 <table>
-<tr><th>Type</th><th>What to test</th><th>Why</th><th>From</th></tr>
+<thead><tr><th>Type</th><th>What to test</th><th>Why</th><th>From</th></tr></thead>
+<tbody>
 {% for i in items %}
 <tr {% if i.tickets | length > 1 %}class="ov"{% endif %}>
-  <td>{% if i.type == "non_functional" %}<span class="sev-h">{{ i.type }}</span>{% else %}{{ i.type }}{% endif %}</td>
-  <td>{{ i.what }}{% if i.what in fresh %}<span class="new-badge">new in v{{ report.version }}</span>{% endif %}</td>
-  <td>{{ i.why }}</td>
-  <td>{% for k in i.tickets %}<a href="/portal/tickets/{{ k | urlencode }}">{{ k }}</a>{{ ", " if not loop.last }}{% endfor %}</td>
+  <td>{{ chip(i.type) }}</td>
+  <td><span class="cell-title">{{ i.what }}</span>{% if i.what in fresh %}{{ new_tag(report.version) }}{% endif %}</td>
+  <td class="muted">{{ i.why }}</td>
+  <td class="keys">{% for k in i.tickets %}{{ key(k) }}{% endfor %}</td>
 </tr>
 {% else %}
-<tr><td colspan="4" class="muted">No test scope items.</td></tr>
+<tr><td colspan="4" class="empty">{% if report.content.test_scope_status == "pending" %}Test scope pending (LLM budget). It will appear in the next report version.{% elif report.content.test_scope_status == "error" %}Test scope could not be generated for this version; it will be retried.{% else %}No test scope items.{% endif %}</td></tr>
 {% endfor %}
+</tbody>
 </table>
 </div>
-{% for i in diff.new_test_items %}
-<p class="new">New in v{{ report.version }}: "{{ i.type }}: {{ i.what }}"</p>
-{% endfor %}
-{% endif %}
+</div>

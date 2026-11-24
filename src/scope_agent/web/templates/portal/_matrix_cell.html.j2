@@ -1,13 +1,14 @@
-{% from "portal/_macros.html.j2" import sev %}
-<div class="cell-detail">
-<h4>{{ area }} × <a href="/portal/tickets/{{ ticket | urlencode }}">{{ ticket }}</a></h4>
+{% from "portal/_macros.html.j2" import sev, key %}
+<div class="card cell-detail">
+<div class="card-head"><h3>{{ area }} × {{ key(ticket) }}</h3>
+  <span class="muted small">{{ records | length }} commit{{ "s" if records | length != 1 }}</span></div>
 {% for r in records %}
-<div>
-  <p><code>{{ r.commit[:7] }}</code> {{ r.repo }} · {{ r.author_name }} · {{ r.committed_at.strftime("%b %d") }} {{ sev(r.max_severity) }}</p>
+<div class="commit">
+  <div><code>{{ r.commit[:7] }}</code> <span class="muted">{{ r.repo }} · {{ r.author_name }} · {{ r.committed_at.strftime("%b %d") }}</span> {{ sev(r.max_severity) }}</div>
   {% if r.test_note %}<ul>{% for n in r.test_note %}<li>{{ n }}</li>{% endfor %}</ul>{% endif %}
 </div>
 {% else %}
-<p class="muted">No commits recorded for this cell.</p>
+<div class="empty">No commits recorded for this cell.</div>
 {% endfor %}
-<p><a href="/portal/epics/{{ subject | urlencode }}?tab=areas-matrix">Back to the matrix</a></p>
+<div class="card-body"><a href="/portal/epics/{{ subject | urlencode }}?tab=areas-matrix">Back to the matrix</a></div>
 </div>

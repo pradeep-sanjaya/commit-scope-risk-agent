@@ -139,3 +139,46 @@ def test_epic_list_page_layout():
     assert '<option value="PAY" selected' in selected and re.search(r'name="high"[^>]*checked', selected)
     assert "Test scope pending" in client(status="pending").get("/portal").text
     assert "No Epics match these filters." in client().get("/portal", params={"q": "zzz"}).text
+
+
+def _body(c, tab):
+    return c.get(f"/portal/epics/PAY-100/tab/{tab}").text
+
+
+def test_tab_bodies_use_cards_and_badges():
+    c = client()
+    areas = _body(c, "areas-list")
+    assert 'class="card"' in areas and 'class="toolbar"' in areas and 'class="seg"' in areas
+    assert "test them together" in areas and 'class="ov"' in areas
+    assert 'class="badge b-high"' in _body(c, "risks")
+    assert 'class="chip">Feature flags<' in _body(c, "tickets")
+    scope = _body(c, "test-scope")
+    assert 'class="chip">integration<' in scope and 'class="ov"' in scope  # 2-ticket item
+    assert 'class="matrix"' in _body(c, "areas-matrix")
+
+
+def test_wide_tables_are_wrapped():
+    c = client()
+    pages = [_body(c, t) for t in ("areas-list", "areas-matrix", "tickets", "test-scope", "risks", "history")]
+    pages.append(c.get("/portal/tickets/PAY-101").text)
+    for html in pages:
+        tables = html.count("<table")
+        assert tables and html.count('<div class="table-wrap">') >= tables
+
+
+def test_empty_states_render():
+    q, db, _ = seed()
+    q.epic_risks = lambda subject: []
+    c = TestClient(create_app("w", ["development"], JobQueue(db), RatingRepository(db), "r", portal_queries=q))
+    risks = _body(c, "risks")
+    assert 'class="empty"' in risks and "No findings recorded for this Epic." in risks
+    assert "Test scope pending (LLM budget)" in _body(client(status="pending"), "test-scope")
+
+
+def test_ticket_page_layout():
+    html = client().get("/portal/tickets/PAY-101").text
+    assert re.search(r'class="crumb">.*PAY-100.*PAY-101', html, re.S)
+    for section in ("Acceptance criteria", "Impacted areas", "Findings", "Commits"):
+        assert section in html, section
+    assert '<span class="cnt">2</span>' in html  # two commits
+    assert "<code>a1b2c3d</code>" in html and 'class="chip">In QA<' in html

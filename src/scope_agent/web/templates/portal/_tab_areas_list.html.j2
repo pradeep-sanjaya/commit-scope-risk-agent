@@ -1,22 +1,30 @@
+{% from "portal/_macros.html.j2" import sev, key, chip, new_tag %}
 {% set base = "/portal/epics/" ~ (page.subject | urlencode) %}
 {% set vq = ("&v=" ~ report.version) if pinned else "" %}
 {% set vq1 = ("?v=" ~ report.version) if pinned else "" %}
-<div class="toggle">
-  <a class="on" href="{{ base }}?tab=areas-list{{ vq }}" hx-get="{{ base }}/tab/areas-list{{ vq1 }}" hx-target="#tabs" hx-swap="outerHTML" hx-push-url="{{ base }}?tab=areas-list{{ vq }}">List</a><a href="{{ base }}?tab=areas-matrix{{ vq }}" hx-get="{{ base }}/tab/areas-matrix{{ vq1 }}" hx-target="#tabs" hx-swap="outerHTML" hx-push-url="{{ base }}?tab=areas-matrix{{ vq }}">Matrix</a>
+<div class="card">
+<div class="toolbar">
+  <div class="seg" role="group" aria-label="View">
+    <a class="on" aria-current="true" href="{{ base }}?tab=areas-list{{ vq }}" hx-get="{{ base }}/tab/areas-list{{ vq1 }}" hx-target="#tabs" hx-swap="outerHTML" hx-push-url="{{ base }}?tab=areas-list{{ vq }}">List</a><a href="{{ base }}?tab=areas-matrix{{ vq }}" hx-get="{{ base }}/tab/areas-matrix{{ vq1 }}" hx-target="#tabs" hx-swap="outerHTML" hx-push-url="{{ base }}?tab=areas-matrix{{ vq }}">Matrix</a>
+  </div>
+  <span class="hint">Highlighted rows: several tickets touch the area, so test them together.</span>
 </div>
 <div class="table-wrap">
 <table>
-<tr><th>Area</th><th>Changed by</th><th>Change kinds</th><th>Risk</th></tr>
+<thead><tr><th>Area</th><th>Tickets</th><th>Change kinds</th><th>Risk</th></tr></thead>
+<tbody>
 {% for r in agg.area_rows %}
 <tr {% if r.overlap %}class="ov"{% endif %}>
-  <td><b>{{ r.area }}</b>{% if r.area in diff.new_areas %}<span class="new-badge">new in v{{ report.version }}</span>{% endif %}
-    {% if r.overlap %}<br><small>{{ r.tickets | length }} tickets, test together{% if r.area in diff.new_overlaps %} <span class="new-badge">new overlap in v{{ report.version }}</span>{% endif %}</small>{% endif %}</td>
-  <td>{% for k in r.tickets %}<a href="/portal/tickets/{{ k | urlencode }}">{{ k }}</a>{{ ", " if not loop.last }}{% endfor %}</td>
-  <td>{% for k in r.change_kinds %}<span class="tag">{{ k }}</span>{% endfor %}</td>
-  <td>{% if r.max_severity %}<span class="{{ r.max_severity | sev_class }}">{{ r.max_severity | sev_value }}</span>{% endif %}</td>
+  <td><span class="cell-title">{{ r.area }}</span>{% if r.area in diff.new_areas %}{{ new_tag(report.version) }}{% endif %}
+    {% if r.overlap %}<div class="sub">{{ r.tickets | length }} tickets · test together{% if r.area in diff.new_overlaps %}{{ new_tag(report.version, "new overlap") }}{% endif %}</div>{% endif %}</td>
+  <td class="keys">{% for k in r.tickets %}{{ key(k) }}{% endfor %}</td>
+  <td>{% for k in r.change_kinds %}{{ chip(k) }}{% endfor %}</td>
+  <td>{{ sev(r.max_severity) }}</td>
 </tr>
 {% else %}
-<tr><td colspan="4" class="muted">No impacted areas recorded.</td></tr>
+<tr><td colspan="4" class="empty">No impacted areas recorded.</td></tr>
 {% endfor %}
+</tbody>
 </table>
+</div>
 </div>

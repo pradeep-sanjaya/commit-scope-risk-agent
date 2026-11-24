@@ -1,25 +1,34 @@
+{% from "portal/_macros.html.j2" import key, new_tag %}
 {% set base = "/portal/epics/" ~ (page.subject | urlencode) %}
 {% set vq = ("&v=" ~ report.version) if pinned else "" %}
 {% set vq1 = ("?v=" ~ report.version) if pinned else "" %}
 {% set cols = agg.matrix | map(attribute="ticket") | unique | sort | list %}
 {% set cells = {} %}
 {% for c in agg.matrix %}{% set _ = cells.update({(c.area, c.ticket): c}) %}{% endfor %}
-<div class="toggle">
-  <a href="{{ base }}?tab=areas-list{{ vq }}" hx-get="{{ base }}/tab/areas-list{{ vq1 }}" hx-target="#tabs" hx-swap="outerHTML" hx-push-url="{{ base }}?tab=areas-list{{ vq }}">List</a><a class="on" href="{{ base }}?tab=areas-matrix{{ vq }}" hx-get="{{ base }}/tab/areas-matrix{{ vq1 }}" hx-target="#tabs" hx-swap="outerHTML" hx-push-url="{{ base }}?tab=areas-matrix{{ vq }}">Matrix</a>
+<div class="card">
+<div class="toolbar">
+  <div class="seg" role="group" aria-label="View">
+    <a href="{{ base }}?tab=areas-list{{ vq }}" hx-get="{{ base }}/tab/areas-list{{ vq1 }}" hx-target="#tabs" hx-swap="outerHTML" hx-push-url="{{ base }}?tab=areas-list{{ vq }}">List</a><a class="on" aria-current="true" href="{{ base }}?tab=areas-matrix{{ vq }}" hx-get="{{ base }}/tab/areas-matrix{{ vq1 }}" hx-target="#tabs" hx-swap="outerHTML" hx-push-url="{{ base }}?tab=areas-matrix{{ vq }}">Matrix</a>
+  </div>
+  <span class="hint">Commits per area and ticket. Select a cell to see its commits and what to test.</span>
 </div>
 <div class="table-wrap">
-<table>
-<tr><th>Area ↓ / Ticket →</th>{% for k in cols %}<th><a href="/portal/tickets/{{ k | urlencode }}">{{ k }}</a></th>{% endfor %}</tr>
+<table class="matrix">
+<thead><tr><th>Area</th>{% for k in cols %}<th>{{ key(k) }}</th>{% endfor %}</tr></thead>
+<tbody>
 {% for r in agg.area_rows %}
 <tr {% if r.overlap %}class="ov"{% endif %}>
-  <td><b>{{ r.area }}</b>{% if r.area in diff.new_areas %}<span class="new-badge">new in v{{ report.version }}</span>{% endif %}</td>
+  <td><span class="cell-title">{{ r.area }}</span>{% if r.area in diff.new_areas %}{{ new_tag(report.version) }}{% endif %}</td>
   {% for k in cols %}
   {% set c = cells.get((r.area, k)) %}
-  <td class="cell-x">{% if c %}<a href="{{ base }}/cell?area={{ r.area | urlencode }}&amp;ticket={{ k | urlencode }}" hx-get="{{ base }}/cell?area={{ r.area | urlencode }}&amp;ticket={{ k | urlencode }}" hx-target="#cell-detail">{% if c.max_severity %}<span class="{{ c.max_severity | sev_class }}">●</span> {% endif %}{{ c.commits }}</a>{% endif %}</td>
+  <td class="cell">{% if c %}<a href="{{ base }}/cell?area={{ r.area | urlencode }}&amp;ticket={{ k | urlencode }}" hx-get="{{ base }}/cell?area={{ r.area | urlencode }}&amp;ticket={{ k | urlencode }}" hx-target="#cell-detail" aria-label="{{ c.commits }} commits: {{ r.area }} × {{ k }}">{% if c.max_severity %}<span class="dot {{ c.max_severity | sev_class }}" aria-hidden="true"></span>{% endif %}{{ c.commits }}</a>{% endif %}</td>
   {% endfor %}
 </tr>
+{% else %}
+<tr><td class="empty">No impacted areas recorded.</td></tr>
 {% endfor %}
+</tbody>
 </table>
 </div>
-<p class="muted"><small>Select a cell to see that ticket's commits in that area, and what to test.</small></p>
-<div id="cell-detail"></div>
+</div>
+<div id="cell-detail" aria-live="polite"></div>

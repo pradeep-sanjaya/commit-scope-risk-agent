@@ -1,34 +1,51 @@
 {% extends "portal/base.html.j2" %}
-{% from "portal/_macros.html.j2" import sev %}
+{% from "portal/_macros.html.j2" import sev, chip %}
 {% set t = page.ticket %}
 {% block title %}{{ t.key }} · QA Impact Portal{% endblock %}
 {% block content %}
-<div class="crumb"><a href="/portal">Epics</a>{% if t.epic_key %} › <a href="/portal/epics/{{ t.epic_key | urlencode }}">{{ t.epic_key }}</a>{% endif %} › {{ t.key }}</div>
-<h2>{{ t.key }}{% if t.summary %} · {{ t.summary }}{% endif %}{% if t.status %} · <span class="tag">{{ t.status }}</span>{% endif %}</h2>
-<div class="cols">
+<div class="crumb"><a href="/portal">Epics</a>{% if t.epic_key %} / <a href="/portal/epics/{{ t.epic_key | urlencode }}">{{ t.epic_key }}</a>{% endif %} / {{ t.key }}</div>
+<div class="title-row">
+  <h1>{{ t.summary or t.key }}</h1>
+  {% if t.summary %}<span class="key">{{ t.key }}</span>{% endif %}
+  {% if t.status %}{{ chip(t.status) }}{% endif %}
+</div>
+<div class="cols" style="margin-top: 16px">
   <div>
-    <h4>Acceptance criteria (from JIRA)</h4>
-    {% if t.acceptance_criteria %}<pre style="white-space:pre-wrap">{{ t.acceptance_criteria }}</pre>{% else %}<p class="muted">None found.</p>{% endif %}
-    <h4>Impacted areas</h4>
-    <p>{% for a in page.areas %}<span class="tag">{{ a }}</span>{% else %}<span class="muted">none</span>{% endfor %}</p>
-    <h4>Findings</h4>
-    {% for f in page.findings %}<p>{{ sev(f.severity) }} {{ f.title }}<br><small class="muted">{{ f.explanation }}</small></p>{% else %}<p class="muted">None.</p>{% endfor %}
+    <section class="card">
+      <div class="card-head"><h2>Acceptance criteria</h2><span class="muted small">from JIRA</span></div>
+      <div class="card-body">{% if t.acceptance_criteria %}<pre class="prose">{{ t.acceptance_criteria }}</pre>{% else %}<p class="muted" style="margin:0">None found in JIRA.</p>{% endif %}</div>
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>Impacted areas</h2></div>
+      <div class="card-body">{% for a in page.areas %}{{ chip(a) }}{% else %}<span class="muted">None recorded.</span>{% endfor %}</div>
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>Findings</h2>{% if page.findings %}<span class="cnt">{{ page.findings | length }}</span>{% endif %}</div>
+      <div class="card-body">
+        {% for f in page.findings %}<div class="finding">{{ sev(f.severity) }} <span class="cell-title">{{ f.title }}</span><div class="sub">{{ f.explanation }}</div></div>
+        {% else %}<span class="muted">None.</span>{% endfor %}
+      </div>
+    </section>
   </div>
-  <div style="flex:1.3">
-    <h4>Commits ({{ page.records | length }}) · each update recorded</h4>
+  <section class="card">
+    <div class="card-head"><h2>Commits</h2><span class="cnt">{{ page.records | length }}</span><span class="muted small" style="margin-left:auto">newest first</span></div>
     <div class="table-wrap">
     <table>
-    <tr><th>When</th><th>Commit</th><th>Areas</th></tr>
+    <thead><tr><th>When</th><th>Commit</th><th>Areas</th></tr></thead>
+    <tbody>
     {% for r in page.records %}
     <tr>
-      <td>{{ r.committed_at.strftime("%b %d") }}</td>
-      <td><code>{{ r.commit[:7] }}</code> {{ r.repo }} {{ sev(r.max_severity) }}
-        {% for n in r.test_note %}<br><small>{{ n }}</small>{% endfor %}</td>
-      <td>{{ r.areas | join(", ") }}</td>
+      <td class="muted" style="white-space:nowrap">{{ r.committed_at.strftime("%b %d") }}</td>
+      <td><code>{{ r.commit[:7] }}</code> <span class="muted">{{ r.repo }}</span> {{ sev(r.max_severity) }}
+        {% for n in r.test_note %}<div class="sub">{{ n }}</div>{% endfor %}</td>
+      <td>{% for a in r.areas %}{{ chip(a) }}{% endfor %}</td>
     </tr>
+    {% else %}
+    <tr><td colspan="3" class="empty">No commits recorded for this ticket.</td></tr>
     {% endfor %}
+    </tbody>
     </table>
     </div>
-  </div>
+  </section>
 </div>
 {% endblock %}

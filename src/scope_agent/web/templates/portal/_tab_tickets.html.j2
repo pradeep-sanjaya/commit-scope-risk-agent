@@ -1,15 +1,20 @@
+{% from "portal/_macros.html.j2" import key, chip %}
 {% set per_ticket = {} %}
 {% for c in agg.matrix %}{% set _ = per_ticket.update({c.ticket: per_ticket.get(c.ticket, []) + [c.area]}) %}{% endfor %}
+<div class="card">
 <div class="table-wrap">
 <table>
-<tr><th>Ticket</th><th>Summary</th><th>Status</th><th>Assignee</th><th>Areas</th></tr>
+<thead><tr><th>Ticket</th><th>Summary</th><th>Status</th><th>Assignee</th><th>Impacted areas</th></tr></thead>
+<tbody>
 {% for t in agg.tickets %}
 <tr>
-  <td><a href="/portal/tickets/{{ t.key | urlencode }}">{{ t.key }}</a></td><td>{{ t.summary }}</td><td>{{ t.status }}</td><td>{{ t.assignee or "–" }}</td>
-  <td>{% for a in per_ticket.get(t.key, []) %}<span class="tag">{{ a }}</span>{% else %}<span class="muted">none yet</span>{% endfor %}</td>
+  <td>{{ key(t.key) }}</td><td>{{ t.summary }}</td><td>{{ chip(t.status) if t.status else "–" }}</td><td>{{ t.assignee or "–" }}</td>
+  <td>{% for a in per_ticket.get(t.key, []) %}{{ chip(a) }}{% else %}<span class="muted">No commits yet</span>{% endfor %}</td>
 </tr>
 {% else %}
-<tr><td colspan="5" class="muted">No tickets known for this Epic.</td></tr>
+<tr><td colspan="5" class="empty">No tickets known for this Epic.</td></tr>
 {% endfor %}
+</tbody>
 </table>
+</div>
 </div>
