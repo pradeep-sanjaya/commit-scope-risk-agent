@@ -188,3 +188,32 @@ def test_pipeline_save_failure_rolls_back_ledger(db):
     with pytest.raises(RuntimeError):
         p.run(1, JOB)
     assert _count(db, findings_t) == 0 and not CommitLedger(db).is_analyzed("P/r", "c1")
+
+
+def test_pipeline_on_commit_runs_in_same_transaction_and_failure_rolls_back(db):
+    """If impact recording fails, nothing is marked analyzed, so the retry re-records the commits."""
+    seen = []
+
+    def boom(result, session):
+        seen.append((result.commits[0].sha, session is not None))
+        raise RuntimeError("impact down")
+
+    p, *_ = _pipe(db, [_commit("c1")])
+    with pytest.raises(RuntimeError, match="impact down"):
+        p.run(1, JOB, on_commit=boom)
+    assert seen == [("c1", True)]
+    assert _count(db, findings_t) == 0 and not CommitLedger(db).is_analyzed("P/r", "c1")
+
+
+def test_pipeline_lost_lease_persists_nothing(db):
+    from scope_agent.persistence.jobs import LeaseLost
+
+    def fence(session):
+        raise LeaseLost("reclaimed")
+
+    committed = []
+    p, *_ = _pipe(db, [_commit("c1")])
+    with pytest.raises(LeaseLost):
+        p.run(1, JOB, fence=fence, on_commit=lambda r, s: committed.append(r))
+    assert committed == []
+    assert _count(db, findings_t) == 0 and not CommitLedger(db).is_analyzed("P/r", "c1")

@@ -1,6 +1,9 @@
 """Orchestrates the analysis of one push; business rules live in the domain modules."""
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
+
+from sqlalchemy.orm import Session
 
 from scope_agent.adapters.bitbucket import BitbucketClient
 from scope_agent.domain.dependency_files import dependency_changes
@@ -53,7 +56,18 @@ class PushPipeline:
         self._project_keys = project_keys
         self._max_commits = max_commits
 
-    def run(self, job_id: int, job: PushJob, force: bool = False) -> PushResult:
+    def run(
+        self,
+        job_id: int,
+        job: PushJob,
+        force: bool = False,
+        fence: Callable[[Session], None] | None = None,
+        on_commit: Callable[[PushResult, Session], None] | None = None,
+    ) -> PushResult:
+        """Analyze the push, then persist everything in one transaction: `fence` first (it raises if the
+        caller no longer holds the job, so a reclaimed job's stale worker writes nothing), then findings,
+        the analyzed-commit marks and `on_commit` (e.g. impact records). If any step fails, nothing is
+        marked analyzed and a retry redoes the work."""
         repo = job.repo
         commits, merges = self._load_commits(job, force)
         result = PushResult(job_id=job_id, job=job, commits=commits)
@@ -98,8 +112,12 @@ class PushPipeline:
                 f.author_email = by_sha[f.commit].author_email
 
         with self._db.session() as s:
+            if fence is not None:
+                fence(s)
             self._findings.save(job_id, result.findings, result.summaries, errors, session=s)
             self._ledger.mark_analyzed(repo, [c.sha for c in commits] + merges, session=s)
+            if on_commit is not None:
+                on_commit(result, s)
         return result
 
     def _load_commits(self, job: PushJob, force: bool) -> tuple[list[CommitData], list[str]]:

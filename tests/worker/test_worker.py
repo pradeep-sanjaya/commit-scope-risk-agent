@@ -29,7 +29,7 @@ class Rec:
     def __init__(self, exc=None):
         self.calls, self.exc = [], exc
 
-    def handle(self, job_id, payload):
+    def handle(self, job_id, payload, attempts):
         self.calls.append((job_id, payload))
         if self.exc:
             raise self.exc
@@ -63,7 +63,7 @@ def test_worker_defers_on_budget(env):
     assert r.status == "deferred"
     # 2026-01-01 12:00 UTC = 17:30 Colombo (+5:30); next local midnight = Jan 2 00:00 +05:30 = Jan 1 18:30 UTC
     assert r.not_before == datetime(2026, 1, 1, 18, 35, tzinfo=timezone.utc)
-    assert r.attempts == 1
+    assert r.attempts == 0  # a budget deferral does not use up a retry
 
 
 def test_worker_retries_then_fails_records_error(env):
@@ -115,7 +115,7 @@ def test_worker_stop_event_exits_loop(env):
     q.enqueue("push", {}, "a")
 
     class StopAfter(Rec):
-        def handle(self, job_id, payload):
+        def handle(self, job_id, payload, attempts):
             stop.set()
 
     w = worker(env, {"push": StopAfter()})
@@ -130,7 +130,7 @@ def test_worker_lost_transition_is_logged_not_raised(env):
     q.enqueue("push", {}, "a")
 
     class Slow(Rec):
-        def handle(self, job_id, payload):
+        def handle(self, job_id, payload, attempts):
             clock.advance(seconds=120)
             other = q.claim(60)  # another worker reclaims and finishes
             q.complete(other.id, other.attempts)
@@ -141,12 +141,21 @@ def test_worker_lost_transition_is_logged_not_raised(env):
 
 
 class FakePipeline:
-    def __init__(self):
-        self.ran = []
+    """Mimics PushPipeline's commit step: fence, then on_commit, in one session."""
 
-    def run(self, job_id, job, force=False):
+    def __init__(self, db, before_commit=lambda: None):
+        self.db, self.before_commit, self.ran = db, before_commit, []
+
+    def run(self, job_id, job, force=False, fence=None, on_commit=None):
         self.ran.append((job_id, job))
-        return PushResult(job_id=job_id, job=job)
+        result = PushResult(job_id=job_id, job=job)
+        self.before_commit()
+        with self.db.session() as s:
+            if fence is not None:
+                fence(s)
+            if on_commit is not None:
+                on_commit(result, s)
+        return result
 
 
 class BadNotifier:
@@ -154,31 +163,55 @@ class BadNotifier:
         raise RuntimeError("smtp down")
 
 
+class Notifier:
+    def __init__(self):
+        self.sent = []
+
+    def notify(self, result):
+        self.sent.append(result)
+
+
+PUSH = PushJob(repo="P/r", branch="development", from_hash=None, to_hash="abc", pushed_by=None)
+
+
 def test_worker_email_failure_still_completes(env):
     db, clock, q, _ = env
-    job = PushJob(repo="P/r", branch="development", from_hash=None, to_hash="abc", pushed_by=None)
-    jid = q.enqueue("push", job.model_dump(mode="json"), "k")
-    pipeline, after = FakePipeline(), []
-    handler = PushJobHandler(pipeline, BadNotifier(), after.append)
+    jid = q.enqueue("push", PUSH.model_dump(mode="json"), "k")
+    pipeline, committed = FakePipeline(db), []
+    handler = PushJobHandler(pipeline, BadNotifier(), q, lambda r, s: committed.append(r))
     worker(env, {"push": handler}).run_once()
     assert row(db, jid).status == "done"
-    assert pipeline.ran == [(jid, job)] and len(after) == 1
+    assert pipeline.ran == [(jid, PUSH)] and len(committed) == 1
 
 
-def test_after_push_failure_does_not_fail_job_and_still_notifies(env):
+def test_impact_recording_failure_retries_job_without_email(env):
     db, clock, q, _ = env
-    job = PushJob(repo="P/r", branch="development", from_hash=None, to_hash="abc", pushed_by=None)
-    jid = q.enqueue("push", job.model_dump(mode="json"), "k")
-    notified = []
+    jid = q.enqueue("push", PUSH.model_dump(mode="json"), "k")
+    notifier = Notifier()
 
-    class Notifier:
-        def notify(self, result):
-            notified.append(result)
-
-    def boom(result):
+    def boom(result, session):
         raise RuntimeError("impact down")
 
+    worker(env, {"push": PushJobHandler(FakePipeline(db), notifier, q, boom)}).run_once()
+    r = row(db, jid)
+    assert (r.status, r.last_error) == ("queued", "impact down")
+    assert notifier.sent == []
+
+
+def test_stale_worker_writes_nothing_and_sends_no_email(env):
+    db, clock, q, _ = env
+    jid = q.enqueue("push", PUSH.model_dump(mode="json"), "k")
+    notifier, committed, reclaimed = Notifier(), [], []
+
+    def lease_expires_and_job_is_reclaimed():
+        clock.advance(seconds=120)
+        reclaimed.append(q.claim(60))
+
+    pipeline = FakePipeline(db, lease_expires_and_job_is_reclaimed)
+    handler = PushJobHandler(pipeline, notifier, q, lambda r, s: committed.append(r))
     with capture_logs() as logs:
-        worker(env, {"push": PushJobHandler(FakePipeline(), Notifier(), boom)}).run_once()
-    assert row(db, jid).status == "done" and len(notified) == 1
-    assert any(e["event"] == "after_push_failed" and e["job_id"] == jid and "impact down" in e["error"] for e in logs)
+        worker(env, {"push": handler}).run_once()
+    assert committed == [] and notifier.sent == []
+    assert any(e["event"] == "job_lease_lost" for e in logs)
+    r = row(db, jid)
+    assert (r.status, r.attempts) == ("running", reclaimed[0].attempts)  # untouched for the new holder

@@ -139,7 +139,7 @@ def build_container(settings: Settings) -> Container:
     reports = EpicReportBuilder(impact, tickets, findings, report_repo, llm, s.llm_max_input_tokens)
     worker = Worker(
         jobs,
-        {"push": PushJobHandler(pipeline, notifier, recorder), "epic_report": EpicReportJobHandler(reports)},
+        {"push": PushJobHandler(pipeline, notifier, jobs, recorder), "epic_report": EpicReportJobHandler(reports)},
         findings,
         RetryPolicy(s.retry_backoff_seconds), s.job_lease_seconds, s.timezone, utcnow,
     )

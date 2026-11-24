@@ -1,5 +1,7 @@
 from datetime import timedelta
 
+from sqlalchemy.orm import Session
+
 from scope_agent.domain.areas import AreaMap
 from scope_agent.domain.impact import build_impact_record
 from scope_agent.persistence.database import Clock
@@ -11,7 +13,8 @@ UNASSIGNED_PREFIX = "unassigned/"
 
 
 class ImpactRecorder:
-    """after_push hook: record one impact per analyzed commit, then request debounced Epic reports."""
+    """Push commit hook: record one impact per analyzed commit, then request debounced Epic reports.
+    Runs inside the push's commit transaction, so a failure here leaves the commits unanalyzed."""
 
     def __init__(
         self,
@@ -29,7 +32,7 @@ class ImpactRecorder:
         self._debounce = timedelta(seconds=debounce_seconds)
         self._clock = clock
 
-    def __call__(self, result: PushResult) -> None:
+    def __call__(self, result: PushResult, session: Session | None = None) -> None:
         records = [
             build_impact_record(
                 c, result.keys_by_commit.get(c.sha, []), result.tickets,
@@ -38,11 +41,12 @@ class ImpactRecorder:
             )
             for c in result.commits
         ]
-        self._records.save(records)
+        self._records.save(records, session=session)
         not_before = self._clock() + self._debounce
         for subject in dict.fromkeys(r.subject for r in records):
             if subject.startswith(UNASSIGNED_PREFIX):
                 continue
             self._jobs.enqueue(
-                "epic_report", {"subject": subject}, f"epic_report:{subject}", "pending", not_before=not_before,
+                "epic_report", {"subject": subject}, f"epic_report:{subject}", "pending",
+                not_before=not_before, session=session,
             )

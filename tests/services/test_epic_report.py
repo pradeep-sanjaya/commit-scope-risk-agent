@@ -160,5 +160,5 @@ def test_plain_ticket_subject(db):
 
 def test_handler_rebuilds_payload_subject(env):
     b, reports = build(env, FakeLLM())
-    EpicReportJobHandler(b).handle(1, {"subject": "PAY-100"})
+    EpicReportJobHandler(b).handle(1, {"subject": "PAY-100"}, 1)
     assert reports.latest("PAY-100").version == 1

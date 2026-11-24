@@ -164,3 +164,65 @@ def test_stale_attempt_cannot_transition_job_running_on_newer_attempt(jobs, cloc
         row = s.execute(select(t.c.status, t.c.attempts, t.c.last_error).where(t.c.id == jid)).one()
     assert tuple(row) == ("running", 2, None)
     assert jobs.complete(jid, b.attempts) is True
+
+
+def test_defer_does_not_count_attempt(jobs, clock):
+    """Budget deferrals must not use up the retry budget."""
+    jid = jobs.enqueue("epic_report", {}, "k")
+    for _ in range(3):
+        job = jobs.claim(60)
+        assert job.attempts == 1
+        assert jobs.defer(jid, job.attempts, clock.now) is True
+    assert jobs.claim(60).attempts == 1
+
+
+def test_forever_dedup_enforced_by_constraint_when_check_races(jobs, monkeypatch):
+    """Two deliveries that both pass the existence check still yield one job."""
+    assert jobs.enqueue("push", {}, "push:k") is not None
+    monkeypatch.setattr(JobQueue, "_blocked", lambda self, s, key, scope: False)
+    assert jobs.enqueue("push", {}, "push:k") is None
+    assert jobs.count_by_status() == {"queued": 1}
+
+
+def test_pending_scope_allows_requeue_while_running(jobs, clock):
+    jid = jobs.enqueue("epic_report", {}, "r", "pending")
+    job = jobs.claim(60)
+    assert jobs.enqueue("epic_report", {}, "r", "pending") is not None
+    assert jobs.retry(jid, job.attempts, clock.now, "boom") is True
+
+
+def test_hold_fences_stale_worker(jobs, clock, db):
+    from scope_agent.persistence.jobs import LeaseLost
+    jobs.enqueue("push", {}, "k")
+    a = jobs.claim(60)
+    with db.session() as s:
+        jobs.hold(a.id, a.attempts, s)  # current holder: no error
+    clock.advance(seconds=61)
+    b = jobs.claim(60)
+    with pytest.raises(LeaseLost):
+        with db.session() as s:
+            jobs.hold(a.id, a.attempts, s)
+    with db.session() as s:
+        jobs.hold(b.id, b.attempts, s)
+
+
+def test_create_all_upgrades_jobs_table_without_unique_key(tmp_path, monkeypatch):
+    from sqlalchemy import MetaData, Table
+    from scope_agent.persistence.database import jobs as t
+    db = Database(f"sqlite:///{tmp_path}/old.db")
+    old = MetaData()  # the jobs table as created before unique_key existed
+    Table("jobs", old, *[c._copy() for c in t.columns if c.name != "unique_key"]).create(db.engine)
+    db.create_all()
+    db.create_all()  # idempotent
+    q = JobQueue(db)
+    assert q.enqueue("push", {}, "push:k") is not None
+    monkeypatch.setattr(JobQueue, "_blocked", lambda self, s, key, scope: False)
+    assert q.enqueue("push", {}, "push:k") is None
+
+
+def test_claim_does_not_take_job_claimed_in_between(jobs, monkeypatch):
+    """SQLite has no SKIP LOCKED: the claiming UPDATE must re-check the job is still runnable."""
+    jobs.enqueue("push", {}, "k")
+    first = jobs.claim(60)
+    monkeypatch.setattr(JobQueue, "_candidate", lambda self, s, now: first.id)
+    assert jobs.claim(60) is None

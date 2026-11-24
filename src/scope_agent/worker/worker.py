@@ -7,7 +7,7 @@ import structlog
 from scope_agent.llm.base import BudgetExceeded
 from scope_agent.persistence.database import Clock
 from scope_agent.persistence.findings import FindingRepository
-from scope_agent.persistence.jobs import ClaimedJob, JobQueue
+from scope_agent.persistence.jobs import ClaimedJob, JobQueue, LeaseLost
 from scope_agent.worker.handlers import JobHandler
 from scope_agent.worker.retry_policy import RetryPolicy
 
@@ -45,7 +45,10 @@ class Worker:
             self._fail(job, f"unknown job kind: {job.kind}", bound)
             return True
         try:
-            handler.handle(job.id, job.payload)
+            handler.handle(job.id, job.payload, job.attempts)
+        except LeaseLost:
+            # Another worker reclaimed the job and owns it now; leave its state alone.
+            bound.warning("job_lease_lost")
         except BudgetExceeded:
             until = self._next_local_midnight_plus()
             bound.info("job_deferred_budget", until=until.isoformat())

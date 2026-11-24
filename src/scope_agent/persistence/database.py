@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     JSON, BigInteger, Column, Date, DateTime, Integer, MetaData, String, Table, Text,
-    TypeDecorator, UniqueConstraint, create_engine,
+    TypeDecorator, UniqueConstraint, create_engine, inspect, text,
 )
 from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.engine import Engine
@@ -46,6 +46,8 @@ jobs = Table(
     Column("kind", String(64), nullable=False),
     Column("payload", JSON, nullable=False),
     Column("dedup_key", String(512), nullable=False, index=True),
+    # Set only for "forever"-scope jobs; the unique constraint makes their dedup race-free.
+    Column("unique_key", String(512), unique=True),
     Column("status", String(16), nullable=False, index=True),
     Column("not_before", UTCDateTime, nullable=False),
     Column("lease_until", UTCDateTime),
@@ -173,6 +175,15 @@ class Database:
 
     def create_all(self) -> None:
         metadata.create_all(self.engine)
+        self._add_jobs_unique_key()
+
+    def _add_jobs_unique_key(self) -> None:
+        """Upgrade a jobs table created before `unique_key` existed (create_all never alters tables)."""
+        if "unique_key" in {c["name"] for c in inspect(self.engine).get_columns("jobs")}:
+            return
+        with self.engine.begin() as conn:
+            conn.execute(text("ALTER TABLE jobs ADD COLUMN unique_key VARCHAR(512)"))
+            conn.execute(text("CREATE UNIQUE INDEX uq_jobs_unique_key ON jobs (unique_key)"))
 
     @contextmanager
     def session(self) -> Iterator[Session]:
