@@ -36,7 +36,7 @@ def _tokens(name: str) -> set[str]:
     return {t for t in _SPLIT.split(name.lower()) if len(t) >= 3 and t not in GENERIC_TOKENS}
 
 
-def _changed_lines(before: str | None, after: str | None) -> tuple[list[str], list[str]]:
+def changed_lines(before: str | None, after: str | None) -> tuple[list[str], list[str]]:
     b = (before or "").splitlines()
     a = (after or "").splitlines()
     removed: list[str] = []
@@ -62,15 +62,15 @@ def _imports(line: str, prefix: str) -> bool:
     return any(m == prefix or m.startswith(prefix + "/") for m in _QUOTED.findall(s))
 
 
-def _any_import(lines: list[str], change: DependencyChange) -> bool:
+def any_import(lines: list[str], change: DependencyChange) -> bool:
     return any(_imports(ln, p) for ln in lines for p in import_prefixes(change))
 
 
 def _import_change(removed: DependencyChange, added: DependencyChange, commits: list[CommitData]) -> bool:
     for commit in commits:
         for f in commit.files:
-            gone, new = _changed_lines(f.before, f.after)
-            if _any_import(gone, removed) and _any_import(new, added):
+            gone, new = changed_lines(f.before, f.after)
+            if any_import(gone, removed) and any_import(new, added):
                 return True
     return False
 

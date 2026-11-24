@@ -160,3 +160,17 @@ def test_budget_exceeded_propagates():
     a = _analyzer(FakeLLM([BudgetExceeded()]))
     with pytest.raises(BudgetExceeded):
         a.analyze([_commit()], {"c1": [_dc("upgraded")]})
+
+
+def test_incident_swap_detected_by_import_change_single_llm_call():
+    from scope_agent.domain.models import FileChange
+    removed = _dc("removed", name="com.corp:flag-util", old="1.0", new=None)
+    added = _dc("added", name="dev.openfeature.contrib.providers:flagd", old=None, new="0.8")
+    c1 = _commit("c1")
+    c1.files = [FileChange(path="Flags.java", status="modified",
+                           before="import com.corp.flagutil.Flags;\n", after="import dev.openfeature.contrib.providers.flagd.FlagdProvider;\n")]
+    llm = FakeLLM([_verdict([_lf()], "polling to streaming")])
+    res = _analyzer(llm).analyze([c1], {"c1": [removed, added]})
+    assert len(llm.prompts) == 1 and "Removed: com.corp:flag-util" in llm.prompts[0]
+    assert [(f.category, f.severity, f.commit) for f in res.findings] == [("connection_model", Severity.high, "c1")]
+    assert [s.kind for s in res.summaries["c1"]] == ["swap"]
