@@ -1,0 +1,142 @@
+<style>
+  .pv { --bg:#f7f8fa; --panel:#fff; --fg:#1b1f24; --muted:#5f6b7a; --line:#e3e7ec; --accent:#2f5fd0; --accent-soft:#eaf0fd;
+        --high:#d1343b; --high-soft:#fdecec; --med:#b76e00; --med-soft:#fff4e0; --low:#5f6b7a; --low-soft:#eef1f4;
+        --new:#1f8a4c; --new-soft:#e7f6ee; --ov:#fff8e6;
+        font: 13px/1.45 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--fg);
+        background: var(--bg); border-radius: 8px; overflow: hidden; border: 1px solid var(--line); text-align: left; }
+  .pv * { box-sizing: border-box; }
+  .pv .topbar { display:flex; align-items:center; gap:18px; padding:0 18px; height:46px; background:#141a24; color:#e8ecf2; }
+  .pv .brand { font-weight:650; letter-spacing:.2px; display:flex; align-items:center; gap:8px; }
+  .pv .logo { width:20px; height:20px; border-radius:5px; background:linear-gradient(135deg,#4c7cf0,#2f5fd0); }
+  .pv .topnav a { color:#aeb8c6; text-decoration:none; margin-right:14px; font-size:13px; }
+  .pv .topnav a.cur { color:#fff; }
+  .pv .search { margin-left:auto; background:#232b38; color:#8d98a8; border-radius:6px; padding:5px 10px; width:240px; font-size:12px; }
+  .pv .page { padding:18px 22px 22px; }
+  .pv .crumb { color:var(--muted); font-size:12px; margin-bottom:6px; }
+  .pv .title { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
+  .pv h1 { font-size:20px; margin:0; font-weight:650; }
+  .pv .key { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; color:var(--muted); font-size:13px; }
+  .pv .ver { margin-left:auto; font-size:12px; color:var(--muted); }
+  .pv .ver b { color:var(--new); font-weight:600; }
+  .pv .kpis { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin:14px 0 16px; }
+  .pv .kpi { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
+  .pv .kpi .n { font-size:20px; font-weight:650; }
+  .pv .kpi .l { color:var(--muted); font-size:11.5px; text-transform:uppercase; letter-spacing:.4px; }
+  .pv .kpi.risk .n { color:var(--high); }
+  .pv .tabs { display:flex; gap:2px; border-bottom:1px solid var(--line); margin-bottom:12px; }
+  .pv .tabs span { padding:8px 12px; color:var(--muted); border-bottom:2px solid transparent; margin-bottom:-1px; font-weight:500; }
+  .pv .tabs span.on { color:var(--fg); border-color:var(--accent); font-weight:600; }
+  .pv .tabs .cnt { background:var(--low-soft); color:var(--muted); border-radius:10px; padding:0 6px; font-size:11px; margin-left:5px; }
+  .pv .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .pv .toolbar { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--line); }
+  .pv .seg { display:inline-flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; font-size:12px; }
+  .pv .seg span { padding:3px 10px; color:var(--muted); }
+  .pv .seg span.on { background:var(--accent-soft); color:var(--accent); font-weight:600; }
+  .pv .hint { margin-left:auto; color:var(--muted); font-size:12px; }
+  .pv table { width:100%; border-collapse:collapse; }
+  .pv th { text-align:left; font-size:11.5px; text-transform:uppercase; letter-spacing:.4px; color:var(--muted); font-weight:600;
+           padding:8px 12px; background:#fafbfc; border-bottom:1px solid var(--line); }
+  .pv td { padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+  .pv tr:last-child td { border-bottom:0; }
+  .pv tr.ov td { background:var(--ov); }
+  .pv tr.ov td:first-child { box-shadow: inset 3px 0 0 #e0a100; }
+  .pv .area { font-weight:600; }
+  .pv .sub { color:var(--muted); font-size:12px; margin-top:2px; }
+  .pv .tk { font-family: ui-monospace, Menlo, Consolas, monospace; font-size:12px; color:var(--accent); margin-right:6px; }
+  .pv .chip { display:inline-block; border:1px solid var(--line); border-radius:4px; padding:0 6px; font-size:11.5px; color:var(--muted); margin:0 4px 2px 0; background:#fafbfc; }
+  .pv .badge { display:inline-flex; align-items:center; gap:5px; border-radius:999px; padding:1px 9px; font-size:11.5px; font-weight:600; }
+  .pv .badge::before { content:""; width:6px; height:6px; border-radius:50%; background:currentColor; }
+  .pv .b-h { background:var(--high-soft); color:var(--high); }
+  .pv .b-m { background:var(--med-soft); color:var(--med); }
+  .pv .b-l { background:var(--low-soft); color:var(--low); }
+  .pv .newtag { background:var(--new-soft); color:var(--new); border-radius:4px; padding:0 6px; font-size:11px; font-weight:600; margin-left:6px; }
+  .pv .split2 { display:grid; grid-template-columns: 250px 1fr; min-height: 420px; }
+  .pv .side { background:var(--panel); border-right:1px solid var(--line); padding:12px 10px; }
+  .pv .side .h { font-size:11.5px; text-transform:uppercase; letter-spacing:.4px; color:var(--muted); font-weight:600; margin:2px 6px 8px; }
+  .pv .side .f { border:1px solid var(--line); border-radius:6px; padding:5px 8px; color:var(--muted); font-size:12px; margin-bottom:10px; }
+  .pv .ep { padding:8px 8px; border-radius:6px; margin-bottom:2px; }
+  .pv .ep.cur { background:var(--accent-soft); }
+  .pv .ep .t { font-weight:600; font-size:12.5px; }
+  .pv .ep .m { color:var(--muted); font-size:11.5px; display:flex; gap:6px; align-items:center; margin-top:2px; }
+  .pv .dot { width:7px; height:7px; border-radius:50%; display:inline-block; }
+</style>
+
+<h2>Which layout fits how QA engineers work?</h2>
+<p class="subtitle">Both use the same visual style (dark top bar, summary cards, quiet tables, soft severity badges, amber overlap rows). The difference is how you move between Epics. Real data from DEMO-100.</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="pv">
+        <div class="topbar"><div class="brand"><span class="logo"></span>QA Impact</div>
+          <div class="topnav"><a class="cur">Epics</a><a>Tickets</a></div>
+          <div class="search">Search Epic, ticket, area…</div></div>
+        <div class="page">
+          <div class="crumb">Epics / DEMO-100</div>
+          <div class="title"><h1>Feature flag platform migration</h1><span class="key">DEMO-100</span>
+            <span class="ver">Report v2 · <b>+3 commits</b> since v1</span></div>
+          <div class="kpis">
+            <div class="kpi"><div class="n">4</div><div class="l">Tickets</div></div>
+            <div class="kpi"><div class="n">3</div><div class="l">Developers</div></div>
+            <div class="kpi"><div class="n">4</div><div class="l">Areas</div></div>
+            <div class="kpi"><div class="n">2</div><div class="l">Overlaps</div></div>
+            <div class="kpi risk"><div class="n">1</div><div class="l">High risk</div></div>
+          </div>
+          <div class="tabs"><span class="on">Impacted areas<span class="cnt">4</span></span><span>Tickets<span class="cnt">4</span></span><span>Test scope<span class="cnt">5</span></span><span>Risks<span class="cnt">3</span></span><span>History</span></div>
+          <div class="card">
+            <div class="toolbar"><div class="seg"><span class="on">List</span><span>Matrix</span></div><span class="hint">Amber rows: several tickets touch the area — test them together</span></div>
+            <table>
+              <tr><th>Area</th><th>Tickets</th><th>Change kinds</th><th>Risk</th></tr>
+              <tr class="ov"><td><div class="area">Feature flags</div><div class="sub">3 tickets · test together</div></td><td><span class="tk">DEMO-101</span><span class="tk">DEMO-102</span><span class="tk">DEMO-103</span></td><td><span class="chip">code</span><span class="chip">endpoint</span><span class="chip">dependency</span></td><td><span class="badge b-h">High</span></td></tr>
+              <tr class="ov"><td><div class="area">Gateway / Envoy</div><div class="sub">2 tickets · test together</div></td><td><span class="tk">DEMO-101</span><span class="tk">DEMO-103</span></td><td><span class="chip">config</span></td><td><span class="badge b-h">High</span></td></tr>
+              <tr><td><div class="area">Checkout API <span class="newtag">new in v2</span></div></td><td><span class="tk">DEMO-102</span></td><td><span class="chip">endpoint</span><span class="chip">migration</span></td><td><span class="badge b-l">Low</span></td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A · Top navigation, one Epic per page</h3>
+      <p>Epic list is its own page; open an Epic to see it full width. Closest to today, most room for wide tables like the ticket × area matrix. Switching Epics means going back to the list.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="pv">
+        <div class="topbar"><div class="brand"><span class="logo"></span>QA Impact</div>
+          <div class="topnav"><a class="cur">Epics</a><a>Tickets</a></div>
+          <div class="search">Search Epic, ticket, area…</div></div>
+        <div class="split2">
+          <div class="side">
+            <div class="f">Filter Epics…</div>
+            <div class="h">Release candidates</div>
+            <div class="ep"><div class="t">DEMO-300 · Search relevance</div><div class="m"><span class="dot" style="background:#5f6b7a"></span>Report pending · 1h ago</div></div>
+            <div class="ep cur"><div class="t">DEMO-100 · Feature flag migration</div><div class="m"><span class="dot" style="background:#d1343b"></span>1 high · 2 overlaps · 2h ago</div></div>
+            <div class="ep"><div class="t">DEMO-200 · Checkout redesign</div><div class="m"><span class="dot" style="background:#b76e00"></span>Scope pending · 12h ago</div></div>
+            <div class="h" style="margin-top:14px">Other</div>
+            <div class="ep"><div class="t">Tickets without an Epic</div><div class="m">1 ticket</div></div>
+            <div class="ep"><div class="t">Commits without a ticket</div><div class="m">1 commit</div></div>
+          </div>
+          <div class="page">
+            <div class="title"><h1>Feature flag platform migration</h1><span class="key">DEMO-100</span></div>
+            <div class="sub" style="margin-top:4px">Report v2 · <b style="color:#1f8a4c">+3 commits</b> since v1 · 4 tickets · 3 devs</div>
+            <div class="tabs" style="margin-top:12px"><span class="on">Areas</span><span>Tickets</span><span>Test scope</span><span>Risks</span><span>History</span></div>
+            <div class="card">
+              <table>
+                <tr><th>Area</th><th>Tickets</th><th>Risk</th></tr>
+                <tr class="ov"><td><div class="area">Feature flags</div><div class="sub">3 tickets · test together</div></td><td><span class="tk">DEMO-101</span><span class="tk">DEMO-102</span><span class="tk">DEMO-103</span></td><td><span class="badge b-h">High</span></td></tr>
+                <tr class="ov"><td><div class="area">Gateway / Envoy</div><div class="sub">2 tickets</div></td><td><span class="tk">DEMO-101</span><span class="tk">DEMO-103</span></td><td><span class="badge b-h">High</span></td></tr>
+                <tr><td><div class="area">Checkout API <span class="newtag">new</span></div></td><td><span class="tk">DEMO-102</span></td><td><span class="badge b-l">Low</span></td></tr>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B · Epic sidebar + detail</h3>
+      <p>All Epics stay visible on the left with their risk status; click to switch. Faster when working through several Epics for one release. Less width for the matrix, and on narrow screens the sidebar collapses.</p>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,70 @@
+<style>
+  .pv { --bg:#f7f8fa; --panel:#fff; --fg:#1b1f24; --muted:#5f6b7a; --line:#e3e7ec; --accent:#2f5fd0; --accent-soft:#eaf0fd;
+        --high:#d1343b; --high-soft:#fdecec; --med:#b76e00; --med-soft:#fff4e0; --low:#5f6b7a; --low-soft:#eef1f4;
+        --new:#1f8a4c; --new-soft:#e7f6ee;
+        font: 13px/1.45 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--fg);
+        background: var(--bg); border-radius: 8px; overflow: hidden; border: 1px solid var(--line); text-align:left; }
+  .pv * { box-sizing: border-box; }
+  .pv .topbar { display:flex; align-items:center; gap:18px; padding:0 18px; height:46px; background:#141a24; color:#e8ecf2; }
+  .pv .brand { font-weight:650; display:flex; align-items:center; gap:8px; }
+  .pv .logo { width:20px; height:20px; border-radius:5px; background:linear-gradient(135deg,#4c7cf0,#2f5fd0); }
+  .pv .topnav a { color:#aeb8c6; text-decoration:none; margin-right:14px; }
+  .pv .topnav a.cur { color:#fff; }
+  .pv .page { padding:18px 22px 22px; }
+  .pv h1 { font-size:20px; margin:0 0 2px; font-weight:650; }
+  .pv .lead { color:var(--muted); margin-bottom:14px; }
+  .pv .filters { display:flex; gap:8px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
+  .pv .in { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:6px 10px; color:var(--muted); }
+  .pv .in.grow { flex:1; min-width:220px; }
+  .pv .tog { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); border-radius:6px; padding:5px 10px; background:var(--panel); color:var(--muted); }
+  .pv .tog.on { border-color:var(--high); color:var(--high); background:var(--high-soft); font-weight:600; }
+  .pv .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .pv table { width:100%; border-collapse:collapse; }
+  .pv th { text-align:left; font-size:11.5px; text-transform:uppercase; letter-spacing:.4px; color:var(--muted); font-weight:600; padding:8px 12px; background:#fafbfc; border-bottom:1px solid var(--line); }
+  .pv th.n, .pv td.n { text-align:right; }
+  .pv td { padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  .pv tr:last-child td { border-bottom:0; }
+  .pv tr.row:hover td { background:#f5f8ff; }
+  .pv .t { font-weight:600; }
+  .pv .key { font-family: ui-monospace, Menlo, Consolas, monospace; color:var(--accent); font-size:12px; margin-right:8px; }
+  .pv .sub { color:var(--muted); font-size:12px; }
+  .pv .badge { display:inline-flex; align-items:center; gap:5px; border-radius:999px; padding:1px 9px; font-size:11.5px; font-weight:600; margin-right:4px; }
+  .pv .badge::before { content:""; width:6px; height:6px; border-radius:50%; background:currentColor; }
+  .pv .b-h { background:var(--high-soft); color:var(--high); }
+  .pv .b-m { background:var(--med-soft); color:var(--med); }
+  .pv .b-l { background:var(--low-soft); color:var(--low); }
+  .pv .state { font-size:11.5px; border-radius:4px; padding:1px 7px; font-weight:600; }
+  .pv .s-pend { background:var(--low-soft); color:var(--muted); }
+  .pv .s-scope { background:var(--med-soft); color:var(--med); }
+  .pv .new { color:var(--new); font-weight:600; }
+  .pv .group td { background:#fafbfc; color:var(--muted); font-size:11.5px; text-transform:uppercase; letter-spacing:.4px; font-weight:600; padding:6px 12px; }
+</style>
+
+<h2>Epic list (landing page) in layout A</h2>
+<p class="subtitle">What a QA engineer sees first: every Epic with commits, newest change first, risk at a glance, one click into the Epic. Real demo data.</p>
+
+<div class="mockup"><div class="mockup-body">
+<div class="pv">
+  <div class="topbar"><div class="brand"><span class="logo"></span>QA Impact</div><div class="topnav"><a class="cur">Epics</a><a>Tickets</a></div></div>
+  <div class="page">
+    <h1>Epics</h1>
+    <div class="lead">What changed, where, and what to test together, per Epic.</div>
+    <div class="filters">
+      <span class="in grow">Search Epic, ticket, area or repo…</span>
+      <span class="in">Project: All ▾</span>
+      <span class="tog">● High risk only</span>
+    </div>
+    <div class="card">
+      <table>
+        <tr><th>Epic</th><th class="n">Tickets</th><th class="n">Devs</th><th class="n">Areas</th><th class="n">Overlaps</th><th>Risk</th><th>Last change</th></tr>
+        <tr class="row"><td><span class="key">DEMO-300</span><span class="t">Search relevance tuning</span> <span class="state s-pend">Report pending</span></td><td class="n">1</td><td class="n">1</td><td class="n">1</td><td class="n">–</td><td><span class="badge b-l">1 low</span></td><td>1 h ago</td></tr>
+        <tr class="row"><td><span class="key">DEMO-100</span><span class="t">Feature flag platform migration</span></td><td class="n">4</td><td class="n">3</td><td class="n">4</td><td class="n"><b>2</b></td><td><span class="badge b-h">1 high</span><span class="badge b-m">2 med</span></td><td>2 h ago · <span class="new">+3 commits</span></td></tr>
+        <tr class="row"><td><span class="key">DEMO-200</span><span class="t">Checkout redesign</span> <span class="state s-scope">Test scope pending</span></td><td class="n">2</td><td class="n">2</td><td class="n">2</td><td class="n">1</td><td><span class="badge b-m">1 med</span></td><td>12 h ago</td></tr>
+        <tr class="group"><td colspan="7">Not in an Epic</td></tr>
+        <tr class="row"><td><span class="t">Tickets without an Epic</span> <span class="sub">DEMO-7</span></td><td class="n">1</td><td class="n">1</td><td class="n">1</td><td class="n">–</td><td></td><td>1 d ago</td></tr>
+        <tr class="row"><td><span class="t">Commits without a ticket</span> <span class="sub">add a JIRA key to link them</span></td><td class="n">–</td><td class="n">1</td><td class="n">1</td><td class="n">–</td><td></td><td>3 d ago</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+</div></div>
