@@ -1,0 +1,10 @@
+{"id":"10101","key":"PAY-12","self":"https://x.atlassian.net/rest/api/3/issue/10101","fields":{
+"summary":"Add flag client","issuetype":{"id":"10001","name":"Story","subtask":false,"hierarchyLevel":0},
+"status":{"name":"In Progress"},"components":[{"name":"flags"}],"labels":["backend"],
+"parent":{"id":"10100","key":"PAY-10","fields":{"summary":"Feature flags","issuetype":{"name":"Epic","hierarchyLevel":1}}},
+"issuelinks":[{"type":{"name":"Relates"},"outwardIssue":{"key":"PAY-20","fields":{"summary":"Config loader"}}},{"type":{"name":"Relates"},"inwardIssue":{"key":"PAY-21","fields":{"summary":"Rollout plan"}}}],
+"description":{"type":"doc","version":1,"content":[
+{"type":"paragraph","content":[{"type":"text","text":"Load flags."}]},
+{"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"Acceptance Criteria"}]},
+{"type":"bulletList","content":[{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"flags load on startup"}]}]},{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"falls back to defaults"}]}]}]}]},
+"customfield_10050":{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"text","text":"custom AC"}]}]}}}

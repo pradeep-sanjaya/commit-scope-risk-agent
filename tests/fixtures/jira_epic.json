@@ -1,0 +1,3 @@
+{"id":"10100","key":"PAY-10","fields":{"summary":"Feature flags","issuetype":{"name":"Epic","subtask":false,"hierarchyLevel":1},
+"status":{"name":"In Progress"},"components":[],"labels":[],"issuelinks":[],
+"description":{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"text","text":"Epic goal text"}]}]}}}

@@ -104,3 +104,10 @@ class PushJob(BaseModel):
     from_hash: str | None
     to_hash: str
     pushed_by: str | None
+
+
+class EpicTicket(BaseModel):
+    key: str
+    summary: str
+    status: str
+    assignee: str | None
