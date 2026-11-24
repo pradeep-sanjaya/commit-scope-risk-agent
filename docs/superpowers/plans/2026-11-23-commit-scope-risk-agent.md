@@ -592,7 +592,7 @@ Also add:
   - **`dependency_upgrade`:** looks for changed defaults or runtime behavior (spec §6.4 step 3). Severity is raised when our usage relies on defaults. The summary is at most 120 words.
   - **`dependency_new`:** summarizes runtime defaults. Network, IO or concurrency libraries are at least `medium`.
   - **`dependency_swap`:** compares the two sides on connection model, connection count and keep-alive, ports, retries, caching and failure behavior. A connection-model or connection-count difference is `high` with `connection_model`.
-  - **`code_review`:** reports `risky_change` and `out_of_scope` findings. Neighboring cleanup is fine; formatting-only or test-only changes are never out of scope. It also rates `ac_quality`.
+  - **`code_review`:** reports `risky_change` and `out_of_scope` findings. Neighboring cleanup is fine; formatting-only or test-only changes are never out of scope. Every `out_of_scope` explanation ends with: "If this was agreed outside JIRA, record it as its own ticket so it gets reviewed and planned." It also rates `ac_quality`.
 
 - [ ] **Step 1: Write failing tests**
   - `test_parses_tool_call`

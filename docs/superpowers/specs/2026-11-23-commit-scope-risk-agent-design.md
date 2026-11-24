@@ -8,8 +8,11 @@ Status: Draft for approval
 Unplanned, unreviewed changes are reaching releases. The motivating incident: the
 feature-flag client was **replaced** — an in-house utility dependency (which polled)
 was swapped for the flagd-recommended (OpenFeature flagd) library, whose default
-connection model is **long-lived streaming**. The JIRA ticket said only "implement
-feature flag client"; developers didn't know the protocol had changed. Long-lived streaming connections
+connection model is **long-lived streaming**. The swap was **agreed in team
+discussions and never recorded as its own JIRA item**. It was then implemented and
+committed under an unrelated ticket whose scope didn't cover it. So no ticket
+described the change, and no one reviewing that ticket expected a protocol change.
+This is exactly the out-of-scope case (§6.5). Long-lived streaming connections
 exhausted connections at the API gateway and the Envoy layer, causing a
 **~10-hour outage**.
 
@@ -260,7 +263,9 @@ Ask the LLM for:
   config, new external call, or feature-flag defaults.
 - **Out-of-scope** findings: changes not explained by the ticket, ACs or Epic.
   Neighboring cleanup is fine; formatting-only and test-only changes are never
-  flagged as out of scope.
+  flagged as out of scope. Every out-of-scope finding ends with the
+  recommendation: "If this was agreed outside JIRA, record it as its own ticket so
+  it gets reviewed and planned." Work agreed verbally is the case this targets.
 
 ### 6.6 Finding model
 Each finding has: `id`, `repo`, `commit`, `author`, `jira_keys`, `type`
