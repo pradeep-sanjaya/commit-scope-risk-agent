@@ -59,6 +59,8 @@ All configuration comes from environment variables.
 3. **LLM invalid JSON or API error:** one retry, then a recorded error. The worker survives, and errors are counted in the digest. *Tasks 9, 15.*
 4. **Release notes unavailable** (GitHub 404 or rate limit, no changelog): emits `behavior_unknown`, never silence. *Tasks 8, 10.*
 5. **Missing or invalid config at startup** (an unset required env var, a routing file path that doesn't exist, a malformed list): the process exits non-zero immediately with a message naming the variable. It must not fail later in the middle of a job. *Task 1.*
+6. **Large Epic** with hundreds of commits: the report rebuild stays within `SCOPE_LLM_MAX_INPUT_TOKENS` by summarizing per ticket, and never sends raw diffs. *Task 18.*
+7. **Same commit cherry-picked to `hotfix/*`** under a new SHA: it gets its own impact record, and the Epic report counts it as a separate commit. This is accepted for the POC and shown honestly, not deduped by guesswork. *Task 17.*
 
 ---
 
