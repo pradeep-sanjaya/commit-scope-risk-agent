@@ -69,31 +69,35 @@ class JobQueue:
             job = s.execute(select(jobs).where(jobs.c.id == job_id)).one()
             return ClaimedJob(job.id, job.kind, job.payload, job.attempts)
 
-    def _transition(self, job_id: int, *, only_if_attempted: bool = False, **values) -> bool:
-        """Apply only to a job that is still running, so a stale worker cannot touch a reclaimed job."""
-        cond = and_(jobs.c.id == job_id, jobs.c.status == "running")
-        if only_if_attempted:
-            cond = and_(cond, jobs.c.attempts > 0)
+    def _transition(self, job_id: int, expected_attempts: int, **values) -> bool:
+        """Fenced state change: applies only if the job is still running AND still on the attempt
+        the caller claimed. A worker whose lease expired (job reclaimed, attempts incremented) or
+        whose job already finished therefore cannot alter it. The fence is the attempt number, not
+        a lease token: it does not distinguish two holders of the same attempt (which cannot happen,
+        as every claim increments attempts)."""
+        cond = and_(jobs.c.id == job_id, jobs.c.status == "running", jobs.c.attempts == expected_attempts)
         with self._db.session() as s:
             result = s.execute(update(jobs).where(cond).values(updated_at=self._clock(), **values))
             return result.rowcount > 0
 
-    def complete(self, job_id: int) -> bool:
-        return self._transition(job_id, status="done", lease_until=None)
+    def complete(self, job_id: int, expected_attempts: int) -> bool:
+        return self._transition(job_id, expected_attempts, status="done", lease_until=None)
 
-    def retry(self, job_id: int, at: datetime, error: str) -> bool:
-        return self._transition(job_id, status="queued", not_before=at, lease_until=None, last_error=error)
+    def retry(self, job_id: int, expected_attempts: int, at: datetime, error: str) -> bool:
+        return self._transition(
+            job_id, expected_attempts, status="queued", not_before=at, lease_until=None, last_error=error
+        )
 
-    def fail(self, job_id: int, error: str) -> bool:
-        return self._transition(job_id, status="failed", lease_until=None, last_error=error)
+    def fail(self, job_id: int, expected_attempts: int, error: str) -> bool:
+        return self._transition(job_id, expected_attempts, status="failed", lease_until=None, last_error=error)
 
-    def defer(self, job_id: int, until: datetime) -> bool:
-        return self._transition(job_id, status="deferred", not_before=until, lease_until=None)
+    def defer(self, job_id: int, expected_attempts: int, until: datetime) -> bool:
+        return self._transition(job_id, expected_attempts, status="deferred", not_before=until, lease_until=None)
 
-    def release(self, job_id: int) -> bool:
+    def release(self, job_id: int, expected_attempts: int) -> bool:
         """Back to queued without counting the attempt (used on SIGTERM)."""
         return self._transition(
-            job_id, only_if_attempted=True, status="queued", lease_until=None, attempts=jobs.c.attempts - 1
+            job_id, expected_attempts, status="queued", lease_until=None, attempts=jobs.c.attempts - 1
         )
 
     def count_by_status(self) -> dict[str, int]:

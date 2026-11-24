@@ -133,7 +133,7 @@ def test_worker_lost_transition_is_logged_not_raised(env):
         def handle(self, job_id, payload):
             clock.advance(seconds=120)
             other = q.claim(60)  # another worker reclaims and finishes
-            q.complete(other.id)
+            q.complete(other.id, other.attempts)
 
     with capture_logs() as logs:
         worker(env, {"push": Slow()}).run_once()

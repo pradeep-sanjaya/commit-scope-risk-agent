@@ -19,7 +19,7 @@ def test_enqueue_dedups_forever(jobs):
 
 def test_forever_blocks_even_after_completion(jobs):
     jobs.enqueue("push", {}, "k")
-    jobs.complete(jobs.claim(60).id)
+    jobs.complete(jobs.claim(60).id, 1)
     assert jobs.enqueue("push", {}, "k") is None
 
 
@@ -27,7 +27,7 @@ def test_enqueue_pending_scope_debounces_then_allows_after_completion(jobs, cloc
     jobs.enqueue("epic_report", {"epic": "PAY-100"}, "epic_report:PAY-100", "pending", not_before=clock.now)
     assert jobs.enqueue("epic_report", {"epic": "PAY-100"}, "epic_report:PAY-100", "pending") is None
     c = jobs.claim(60)
-    jobs.complete(c.id)
+    jobs.complete(c.id, 1)
     assert jobs.enqueue("epic_report", {"epic": "PAY-100"}, "epic_report:PAY-100", "pending") is not None
 
 
@@ -52,7 +52,7 @@ def test_claim_oldest_first_and_respects_not_before(jobs, clock):
 def test_claim_skips_future_deferred(jobs, clock):
     jid = jobs.enqueue("push", {}, "k")
     jobs.claim(60)
-    jobs.defer(jid, until=clock.now + timedelta(hours=1))
+    jobs.defer(jid, 1, until=clock.now + timedelta(hours=1))
     assert jobs.claim(60) is None
     clock.advance(hours=2)
     assert jobs.claim(60).id == jid
@@ -70,14 +70,14 @@ def test_expired_lease_is_reclaimed(jobs, clock):
 def test_release_returns_job_without_counting_attempt(jobs):
     jid = jobs.enqueue("push", {}, "k")
     jobs.claim(60)
-    jobs.release(jid)
+    jobs.release(jid, 1)
     assert jobs.claim(60).attempts == 1
 
 
 def test_retry_schedules_and_records_error(jobs, clock, db):
     jid = jobs.enqueue("push", {}, "k")
     jobs.claim(60)
-    jobs.retry(jid, clock.now + timedelta(minutes=5), "boom")
+    jobs.retry(jid, 1, clock.now + timedelta(minutes=5), "boom")
     assert jobs.claim(60) is None
     clock.advance(minutes=6)
     assert jobs.claim(60).id == jid
@@ -87,7 +87,7 @@ def test_fail_and_count_by_status(jobs):
     a = jobs.enqueue("push", {}, "a")
     jobs.enqueue("push", {}, "b")
     jobs.claim(60)
-    jobs.fail(a, "bad")
+    jobs.fail(a, 1, "bad")
     assert jobs.count_by_status() == {"failed": 1, "queued": 1}
     assert jobs.claim(60).id != a
 
@@ -95,7 +95,7 @@ def test_fail_and_count_by_status(jobs):
 def test_count_deferred(jobs, clock):
     jid = jobs.enqueue("push", {}, "a")
     jobs.claim(60)
-    jobs.defer(jid, clock.now + timedelta(days=1))
+    jobs.defer(jid, 1, clock.now + timedelta(days=1))
     assert jobs.count_by_status() == {"deferred": 1}
 
 
@@ -114,11 +114,11 @@ def test_claim_postgres_skip_locked(clock):
 
 def test_transitions_on_non_running_job_are_noops(jobs, clock):
     jid = jobs.enqueue("push", {}, "k")  # queued, never claimed
-    assert jobs.complete(jid) is False
-    assert jobs.retry(jid, clock.now, "x") is False
-    assert jobs.fail(jid, "x") is False
-    assert jobs.defer(jid, clock.now) is False
-    assert jobs.release(jid) is False
+    assert jobs.complete(jid, 1) is False
+    assert jobs.retry(jid, 1, clock.now, "x") is False
+    assert jobs.fail(jid, 1, "x") is False
+    assert jobs.defer(jid, 1, clock.now) is False
+    assert jobs.release(jid, 1) is False
     assert jobs.count_by_status() == {"queued": 1}
 
 
@@ -127,21 +127,40 @@ def test_stale_worker_cannot_touch_reclaimed_then_finished_job(jobs, clock):
     jobs.claim(60)
     clock.advance(seconds=61)
     jobs.claim(60)  # second worker reclaims
-    assert jobs.complete(jid) is True  # second worker finishes
-    assert jobs.retry(jid, clock.now, "stale") is False  # first worker, late
-    assert jobs.fail(jid, "stale") is False
+    assert jobs.complete(jid, 2) is True  # second worker finishes
+    assert jobs.retry(jid, 1, clock.now, "stale") is False  # first worker, late
+    assert jobs.fail(jid, 1, "stale") is False
     assert jobs.count_by_status() == {"done": 1}
 
 
 def test_release_never_drives_attempts_negative(jobs):
     jid = jobs.enqueue("push", {}, "k")
     jobs.claim(60)
-    assert jobs.release(jid) is True
-    assert jobs.release(jid) is False
+    assert jobs.release(jid, 1) is True
+    assert jobs.release(jid, 1) is False
     assert jobs.claim(60).attempts == 1
 
 
 def test_transitions_return_true_when_running(jobs, clock):
     jid = jobs.enqueue("push", {}, "k")
     jobs.claim(60)
-    assert jobs.complete(jid) is True
+    assert jobs.complete(jid, 1) is True
+
+
+def test_stale_attempt_cannot_transition_job_running_on_newer_attempt(jobs, clock, db):
+    from sqlalchemy import select
+    from scope_agent.persistence.database import jobs as t
+    jid = jobs.enqueue("push", {}, "k")
+    a = jobs.claim(60)
+    clock.advance(seconds=61)
+    b = jobs.claim(60)  # B reclaims; A is stale
+    assert (a.attempts, b.attempts) == (1, 2)
+    assert jobs.complete(jid, a.attempts) is False
+    assert jobs.retry(jid, a.attempts, clock.now, "stale") is False
+    assert jobs.fail(jid, a.attempts, "stale") is False
+    assert jobs.defer(jid, a.attempts, clock.now) is False
+    assert jobs.release(jid, a.attempts) is False
+    with db.session() as s:
+        row = s.execute(select(t.c.status, t.c.attempts, t.c.last_error).where(t.c.id == jid)).one()
+    assert tuple(row) == ("running", 2, None)
+    assert jobs.complete(jid, b.attempts) is True

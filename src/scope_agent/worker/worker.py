@@ -49,11 +49,11 @@ class Worker:
         except BudgetExceeded:
             until = self._next_local_midnight_plus()
             bound.info("job_deferred_budget", until=until.isoformat())
-            self._transition(self._jobs.defer(job.id, until), "defer", bound)
+            self._transition(self._jobs.defer(job.id, job.attempts, until), "defer", bound)
         except Exception as exc:
             self._on_error(job, exc, bound)
         else:
-            self._transition(self._jobs.complete(job.id), "complete", bound)
+            self._transition(self._jobs.complete(job.id, job.attempts), "complete", bound)
         return True
 
     def run(self, stop: threading.Event, poll_seconds: float) -> None:
@@ -66,13 +66,13 @@ class Worker:
         next_at = self._retry.next_attempt_at(job.attempts, self._clock())
         if next_at is not None:
             bound.warning("job_retry", error=message, next_attempt_at=next_at.isoformat())
-            self._transition(self._jobs.retry(job.id, next_at, message), "retry", bound)
+            self._transition(self._jobs.retry(job.id, job.attempts, next_at, message), "retry", bound)
         else:
             self._fail(job, message, bound)
 
     def _fail(self, job: ClaimedJob, message: str, bound) -> None:
         bound.error("job_failed", error=message)
-        if self._transition(self._jobs.fail(job.id, message), "fail", bound):
+        if self._transition(self._jobs.fail(job.id, job.attempts, message), "fail", bound):
             repo = job.payload.get("repo", "?") if isinstance(job.payload, dict) else "?"
             self._errors.save(job.id, [], {}, [(repo, None, message)])
 
