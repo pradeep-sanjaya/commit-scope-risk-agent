@@ -1,0 +1,1 @@
+{"lockfileVersion":3,"packages":{"":{"name":"web","dependencies":{"react":"~18.2.0"}},"node_modules/react":{"version":"18.2.0"},"node_modules/rxjs":{"version":"6.6.7"},"node_modules/tslib":{"version":"2.6.1"}}}
