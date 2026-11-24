@@ -1,0 +1,20 @@
+{# Context: library, old_version, new_version, notes (list of (version, text)), usage (str). categories is injected. #}
+You review a library upgrade for runtime-behavior risk: changed defaults, removed or renamed config, or changed connection, retry, caching, TLS, threading or resource behavior (for example a client moving from polling to streaming and exhausting gateway connections).
+This analysis is for human review: a person will read your findings and decide. Be neutral and explain why each item was flagged.
+Risk categories (use exactly these values for `category`):
+{% for c in categories %}- {{ c }}
+{% endfor %}
+For every finding, quote evidence verbatim from the material provided (no paraphrase). If the material does not settle a question, say so rather than guessing; unknown is not safe.
+
+Library: {{ library }}  {{ old_version }} -> {{ new_version }}
+
+Release notes between the versions:
+{% for version, text in notes %}### {{ version }}
+{{ text }}
+{% else %}(none available: report a behavior_unknown finding)
+{% endfor %}
+How our code uses the library:
+{{ usage }}
+
+Raise severity when our usage relies on the defaults that changed. Use type dependency_behavior_change.
+Keep reviewer_summary to at most 120 words.

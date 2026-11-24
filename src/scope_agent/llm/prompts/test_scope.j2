@@ -1,0 +1,22 @@
+{# Context: subject, aggregate (str/dict), tickets (key, summary, acceptance_criteria), test_notes (list of str), findings (list of dicts with severity, category, title). categories is injected. #}
+You propose a test scope for {{ subject }}.
+This analysis is for human review: a person will read your findings and decide. Be neutral and explain why each item was flagged.
+Risk categories (use exactly these values for `category`):
+{% for c in categories %}- {{ c }}
+{% endfor %}
+For every finding, quote evidence verbatim from the material provided (no paraphrase). If the material does not settle a question, say so rather than guessing; unknown is not safe.
+
+Deterministic aggregate (areas, overlaps, change facts):
+{{ aggregate }}
+
+Tickets:
+{% for t in tickets %}- {{ t.key }}: {{ t.summary }}
+  Acceptance criteria: {{ t.acceptance_criteria or 'none' }}
+{% endfor %}
+Commit test notes:
+{% for n in test_notes %}- {{ n }}
+{% endfor %}
+Findings:
+{% for f in findings %}- [{{ f.severity }}] {{ f.category }}: {{ f.title }}
+{% endfor %}
+Produce items such that: each overlap gets at least one integration item; each acceptance criterion of each ticket gets one functional item; every high or medium runtime-risk finding gets a non_functional item; each migration gets a data item; each new config or dependency gets an environment item. Reference ticket keys in tickets.

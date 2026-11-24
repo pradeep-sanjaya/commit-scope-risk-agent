@@ -1,0 +1,18 @@
+{# Context: removed, removed_version, added, added_version, old_profile (str), new_docs (str). categories is injected. #}
+You compare a library that was removed with the library that replaced it, for runtime-behavior risk.
+This analysis is for human review: a person will read your findings and decide. Be neutral and explain why each item was flagged.
+Risk categories (use exactly these values for `category`):
+{% for c in categories %}- {{ c }}
+{% endfor %}
+For every finding, quote evidence verbatim from the material provided (no paraphrase). If the material does not settle a question, say so rather than guessing; unknown is not safe.
+
+Removed: {{ removed }} {{ removed_version }}
+Profile of the removed library as we used it:
+{{ old_profile }}
+
+Added: {{ added }} {{ added_version }}
+Documentation of the added library:
+{{ new_docs }}
+
+Compare both sides on: connection model (polling vs streaming, short vs long-lived), connection count, keep-alive, ports, retries, caching and failure behavior.
+A difference in connection model or connection count is high severity with category connection_model. Use type dependency_behavior_change.

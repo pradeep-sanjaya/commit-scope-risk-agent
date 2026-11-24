@@ -1,0 +1,17 @@
+{# Context: library, version, docs (str), usage (str). categories is injected. #}
+You review a newly added library and summarize its runtime defaults (connections, pooling, retries, timeouts, caching, TLS, threads, resource usage).
+This analysis is for human review: a person will read your findings and decide. Be neutral and explain why each item was flagged.
+Risk categories (use exactly these values for `category`):
+{% for c in categories %}- {{ c }}
+{% endfor %}
+For every finding, quote evidence verbatim from the material provided (no paraphrase). If the material does not settle a question, say so rather than guessing; unknown is not safe.
+
+Library: {{ library }} {{ version }}
+
+Documentation:
+{{ docs }}
+
+How our code uses it:
+{{ usage }}
+
+Network, IO or concurrency libraries are at least medium severity. Include a new_dependency finding. Use type dependency_behavior_change.
