@@ -56,3 +56,17 @@ def test_port_unprefixed(monkeypatch, data_files):
     set_env(monkeypatch)
     monkeypatch.setenv("PORT", "9000")
     assert load_settings().port == 9000
+
+
+def test_blank_required_var_exits_naming_variable(monkeypatch, data_files, capsys):
+    set_env(monkeypatch)
+    monkeypatch.setenv("SCOPE_JIRA_TOKEN", "")
+    with pytest.raises(SystemExit) as e:
+        load_settings()
+    assert e.value.code == 2 and "SCOPE_JIRA_TOKEN" in capsys.readouterr().err
+
+
+def test_blank_optional_var_is_none(monkeypatch, data_files):
+    set_env(monkeypatch)
+    monkeypatch.setenv("SCOPE_PORTAL_AUTH_HEADER", "")
+    assert load_settings().portal_auth_header is None

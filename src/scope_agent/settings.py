@@ -13,7 +13,7 @@ _FILE_FIELDS = ("routing_file", "dependency_hints_file", "areas_file")
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="SCOPE_", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="SCOPE_", extra="ignore", env_ignore_empty=True)
 
     # Bitbucket
     bitbucket_url: str
