@@ -33,7 +33,7 @@ def _fake_container(**over):
         def get_commit(self, repo, sha):
             return SimpleNamespace(parents=["parent1"])
 
-    base = dict(pipeline=Pipeline(), bitbucket=Bitbucket(), notifier=SimpleNamespace(notify=lambda r: seen.setdefault("sent", True)))
+    base = dict(pipeline=Pipeline(), source=Bitbucket(), notifier=SimpleNamespace(notify=lambda r: seen.setdefault("sent", True)))
     base.update(over)
     return SimpleNamespace(**base), seen
 
@@ -96,4 +96,5 @@ def test_cli_web_serves_portal(monkeypatch, data_files):
     res = runner.invoke(cli.app, ["web"])
     assert res.exit_code == 0, res.output
     assert seen["portal_queries"] is portal and seen["portal_auth_header"] == "X-Forwarded-User"
+    assert seen["source_provider"] == "bitbucket"
     assert seen["ran"] == "app"

@@ -1,4 +1,4 @@
-from scope_agent.adapters.bitbucket import BitbucketClient
+from scope_agent.adapters.source import SourceClient
 from scope_agent.domain.file_selection import unified_diff
 from scope_agent.domain.models import CommitData, DependencyChange, FileChange
 from scope_agent.domain.swaps import any_import, changed_lines, import_prefixes
@@ -18,8 +18,8 @@ def _relevant(f: FileChange, change: DependencyChange) -> bool:
 
 
 class UsageContextBuilder:
-    def __init__(self, bitbucket: BitbucketClient, max_chars: int):
-        self._bitbucket = bitbucket
+    def __init__(self, source: SourceClient, max_chars: int):
+        self._source = source
         self._max_chars = max_chars
 
     def build(self, commit: CommitData, change: DependencyChange) -> str:
@@ -37,13 +37,13 @@ class UsageContextBuilder:
 
     def _config(self, commit: CommitData) -> list[str]:
         """Config gets a reserved half of the budget, split per file, so diffs cannot crowd it out."""
-        paths = self._bitbucket.list_files(commit.repo, commit.sha, CONFIG_GLOBS, MAX_CONFIG_FILES)
+        paths = self._source.list_files(commit.repo, commit.sha, CONFIG_GLOBS, MAX_CONFIG_FILES)
         if not paths:
             return []
         per_file = max(self._max_chars // 2 // len(paths), 1)
         parts = []
         for path in paths:
-            content = self._bitbucket.get_file(commit.repo, path, commit.sha)
+            content = self._source.get_file(commit.repo, path, commit.sha)
             if content:
                 parts.append(f"### config {path}\n{content}"[:per_file])
         return parts

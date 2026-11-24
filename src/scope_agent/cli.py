@@ -39,6 +39,7 @@ def web() -> None:
         branches=settings.branches, jobs=c.jobs, ratings=c.ratings,
         rating_secret=settings.rating_secret.get_secret_value(),
         portal_queries=c.portal, portal_auth_header=settings.portal_auth_header,
+        source_provider=settings.source_provider,
     )
     uvicorn.run(api, host="0.0.0.0", port=settings.port, log_config=None)
 
@@ -82,7 +83,7 @@ def seed_demo() -> None:
 
 
 def _analyze_commit(c: Container, repo: str, sha: str, branch: str, send_email: bool):
-    parents = c.bitbucket.get_commit(repo, sha).parents
+    parents = c.source.get_commit(repo, sha).parents
     job = PushJob(repo=repo, branch=branch, from_hash=parents[0] if parents else None,
                   to_hash=sha, pushed_by=None)
     result = c.pipeline.run(SYNTHETIC_JOB_ID, job, force=True)
@@ -125,7 +126,7 @@ def backtest(
 ) -> None:
     """Replay the latest commits of a branch, one synthetic push each."""
     _, c = _boot()
-    shas = c.bitbucket.recent_commits(repo, branch, limit)
+    shas = c.source.recent_commits(repo, branch, limit)
     total = 0
     for sha in shas:
         result = _analyze_commit(c, repo, sha, branch, send_email)

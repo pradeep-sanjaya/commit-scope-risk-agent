@@ -7,7 +7,7 @@ from scope_agent.settings import load_settings
 from tests.test_settings import set_env
 
 SRC = Path(__file__).parent.parent / "src" / "scope_agent"
-ADAPTERS = {"BitbucketClient", "JiraClient", "NexusClient", "GitHubClient", "SmtpSender", "AnthropicClient"}
+ADAPTERS = {"BitbucketClient", "GitHubSourceClient", "JiraClient", "NexusClient", "GitHubClient", "SmtpSender", "AnthropicClient"}
 ALLOWED = {"composition.py", "llm/factory.py"}
 
 
@@ -17,6 +17,21 @@ def test_build_container_from_env(monkeypatch, data_files):
     c = build_container(load_settings())
     assert isinstance(c, Container)
     assert all(getattr(c, name) is not None for name in Container.__dataclass_fields__)
+    from scope_agent.adapters.bitbucket import BitbucketClient
+    assert isinstance(c.source, BitbucketClient)
+    assert c.links.commit("PAY/svc", "abc") == "https://bb.corp/projects/PAY/repos/svc/commits/abc"
+
+
+def test_build_container_with_github_source(monkeypatch, data_files):
+    from scope_agent.adapters.github_source import GitHubSourceClient
+    data_files["SCOPE_ROUTING_FILE"].write_text("default_leads: [lead@corp]\n")
+    set_env(monkeypatch, skip={"SCOPE_BITBUCKET_URL", "SCOPE_BITBUCKET_TOKEN"})
+    monkeypatch.setenv("SCOPE_SOURCE_PROVIDER", "github")
+    monkeypatch.setenv("SCOPE_GITHUB_TOKEN", "ghp_x")
+    c = build_container(load_settings())
+    assert isinstance(c.source, GitHubSourceClient)
+    assert c.pipeline._source is c.source
+    assert c.links.commit("acme/payments", "abc") == "https://github.com/acme/payments/commit/abc"
 
 
 def test_no_module_reads_os_environ():

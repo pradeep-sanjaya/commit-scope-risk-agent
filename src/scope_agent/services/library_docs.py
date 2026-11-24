@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from scope_agent.adapters.bitbucket import BitbucketClient
+from scope_agent.adapters.source import SourceClient
 from scope_agent.adapters.github import GitHubClient
 from scope_agent.adapters.web_pages import WebPageFetcher
 from scope_agent.domain.dependency_hints import DependencyHints
@@ -23,7 +23,7 @@ class LibraryDocsService:
         self,
         resolver: SourceResolver,
         github: GitHubClient,
-        bitbucket: BitbucketClient,
+        source: SourceClient,
         pages: WebPageFetcher,
         hints: DependencyHints,
         max_chars: int,
@@ -31,7 +31,7 @@ class LibraryDocsService:
     ):
         self._resolver = resolver
         self._github = github
-        self._bitbucket = bitbucket
+        self._source = source
         self._pages = pages
         self._hints = hints
         self._max_chars = max_chars
@@ -68,8 +68,8 @@ class LibraryDocsService:
             return self._github.readme(source.ref, source.subpath), f"https://github.com/{source.ref}"
         if source.kind == "bitbucket":
             artifact = change.name.split(":")[-1]
-            tags = self._bitbucket.list_tags(source.ref)
+            tags = self._source.list_tags(source.ref)
             for tag in (f"v{version}", version, f"{artifact}-{version}"):
                 if tag in tags:
-                    return self._bitbucket.get_file(source.ref, "README.md", tag), None
+                    return self._source.get_file(source.ref, "README.md", tag), None
         return None, None

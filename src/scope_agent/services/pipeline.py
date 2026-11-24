@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
 
-from scope_agent.adapters.bitbucket import BitbucketClient
+from scope_agent.adapters.source import SourceClient
 from scope_agent.domain.dependency_files import dependency_changes
 from scope_agent.domain.jira_keys import extract_keys
 from scope_agent.domain.models import (
@@ -36,7 +36,7 @@ class PushResult:
 class PushPipeline:
     def __init__(
         self,
-        bitbucket: BitbucketClient,
+        source: SourceClient,
         tickets: TicketResolver,
         deps: DependencyAnalyzer,
         code: CodeAnalyzer,
@@ -46,7 +46,7 @@ class PushPipeline:
         project_keys: list[str],
         max_commits: int,
     ):
-        self._bitbucket = bitbucket
+        self._source = source
         self._tickets = tickets
         self._deps = deps
         self._code = code
@@ -123,9 +123,9 @@ class PushPipeline:
     def _load_commits(self, job: PushJob, force: bool) -> tuple[list[CommitData], list[str]]:
         commits: list[CommitData] = []
         merges: list[str] = []
-        for sha in self._bitbucket.commits_in_push(job, self._max_commits):
+        for sha in self._source.commits_in_push(job, self._max_commits):
             if not force and self._ledger.is_analyzed(job.repo, sha):
                 continue
-            commit = self._bitbucket.get_commit(job.repo, sha)
+            commit = self._source.get_commit(job.repo, sha)
             (merges if commit.is_merge else commits).append(commit.sha if commit.is_merge else commit)
         return commits, merges

@@ -1,6 +1,6 @@
 import re
 
-from scope_agent.adapters.bitbucket import BitbucketClient
+from scope_agent.adapters.source import SourceClient
 from scope_agent.domain.models import DependencyChange
 from scope_agent.services.source_resolver import SourceResolver
 
@@ -11,9 +11,9 @@ _KEYWORDS = re.compile(r"poll|schedul|interval|stream|grpc|websocket|http|connec
 
 
 class LibraryProfileBuilder:
-    def __init__(self, resolver: SourceResolver, bitbucket: BitbucketClient, max_chars: int):
+    def __init__(self, resolver: SourceResolver, source: SourceClient, max_chars: int):
         self._resolver = resolver
-        self._bitbucket = bitbucket
+        self._source = source
         self._max_chars = max_chars
 
     def profile(self, change: DependencyChange) -> str | None:
@@ -24,21 +24,21 @@ class LibraryProfileBuilder:
         if tag is None:
             return None
         parts: list[str] = []
-        readme = self._bitbucket.get_file(source.ref, "README.md", tag)
+        readme = self._source.get_file(source.ref, "README.md", tag)
         if readme:
             parts.append(f"### README.md\n{readme}")
         matched = 0
-        for path in self._bitbucket.list_files(source.ref, tag, SOURCE_GLOBS, LIST_LIMIT):
+        for path in self._source.list_files(source.ref, tag, SOURCE_GLOBS, LIST_LIMIT):
             if matched >= MAX_FILES:
                 break
-            content = self._bitbucket.get_file(source.ref, path, tag)
+            content = self._source.get_file(source.ref, path, tag)
             if content and (_KEYWORDS.search(path) or _KEYWORDS.search(content)):
                 parts.append(f"### {path}\n{content}")
                 matched += 1
         return "\n\n".join(parts)[: self._max_chars] if parts else None
 
     def _tag(self, repo: str, change: DependencyChange) -> str | None:
-        tags = self._bitbucket.list_tags(repo)
+        tags = self._source.list_tags(repo)
         artifact = change.name.split(":")[-1]
         for candidate in (f"v{change.old_version}", change.old_version, f"{artifact}-{change.old_version}"):
             if candidate in tags:

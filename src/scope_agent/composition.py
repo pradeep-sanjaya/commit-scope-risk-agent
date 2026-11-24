@@ -8,6 +8,8 @@ import structlog
 from sqlalchemy.engine import make_url
 
 from scope_agent.adapters.bitbucket import BitbucketClient
+from scope_agent.adapters.github_source import GitHubSourceClient
+from scope_agent.adapters.source import SourceClient
 from scope_agent.adapters.github import GitHubClient
 from scope_agent.adapters.http import build_http_client
 from scope_agent.adapters.jira import JiraClient
@@ -69,7 +71,7 @@ class Container:
     sender: EmailSender
     links: LinkBuilder
     llm: LLMClient
-    bitbucket: BitbucketClient
+    source: SourceClient
     pipeline: PushPipeline
     notifier: PushNotifier
     digest: DigestService
@@ -94,10 +96,7 @@ def build_container(settings: Settings) -> Container:
     llm = build_llm(s, TokenUsageMeter(db))
 
     timeout = s.http_timeout_seconds
-    bitbucket = BitbucketClient(build_http_client(
-        s.bitbucket_url, timeout,
-        headers={"Authorization": f"Bearer {s.bitbucket_token.get_secret_value()}"},
-    ))
+    source, source_web_url, source_host = _source_client(s, timeout)
     jira = JiraClient(build_http_client(
         s.jira_url, timeout, auth=httpx.BasicAuth(s.jira_email, s.jira_token.get_secret_value()),
     ))
@@ -120,18 +119,19 @@ def build_container(settings: Settings) -> Container:
         s.smtp_password.get_secret_value() if s.smtp_password else None,
         s.smtp_starttls, s.smtp_from,
     )
-    links = LinkBuilder(s.bitbucket_url, s.jira_url, s.public_base_url, s.rating_secret.get_secret_value())
+    links = LinkBuilder(source_web_url, s.jira_url, s.public_base_url, s.rating_secret.get_secret_value(),
+                        s.source_provider)
 
-    resolver = SourceResolver(nexus, hints, urlparse(s.bitbucket_url).hostname or "")
-    notes = ReleaseNotesService(resolver, github, bitbucket, cache)
-    docs = LibraryDocsService(resolver, github, bitbucket, pages, hints, s.docs_max_chars, cache)
-    usage = UsageContextBuilder(bitbucket, s.usage_context_max_chars)
-    profiles = LibraryProfileBuilder(resolver, bitbucket, s.library_profile_max_chars)
+    resolver = SourceResolver(nexus, hints, source_host)
+    notes = ReleaseNotesService(resolver, github, source, cache)
+    docs = LibraryDocsService(resolver, github, source, pages, hints, s.docs_max_chars, cache)
+    usage = UsageContextBuilder(source, s.usage_context_max_chars)
+    profiles = LibraryProfileBuilder(resolver, source, s.library_profile_max_chars)
     deps = DependencyAnalyzer(llm, notes, docs, usage, profiles, hints)
     code = CodeAnalyzer(llm, s.files_exclude, s.files_priority, s.llm_max_input_tokens, s.max_chunks_per_commit)
     tickets = TicketResolver(jira, cache, s.jira_ac_field, s.jira_ac_heading, s.jira_cache_ttl_seconds)
     pipeline = PushPipeline(
-        bitbucket, tickets, deps, code, db, findings, ledger, s.jira_project_keys, s.max_commits_per_push,
+        source, tickets, deps, code, db, findings, ledger, s.jira_project_keys, s.max_commits_per_push,
     )
     notifier = PushNotifier(routing, sender, links)
     recorder = ImpactRecorder(impact, jobs, area_map, s.files_priority, s.report_debounce_seconds, utcnow)
@@ -148,6 +148,23 @@ def build_container(settings: Settings) -> Container:
     return Container(
         settings=s, routing=routing, hints=hints, area_map=area_map, db=db, jobs=jobs, findings=findings,
         impact=impact, ratings=ratings,
-        ledger=ledger, meta=meta, sender=sender, links=links, llm=llm, bitbucket=bitbucket,
+        ledger=ledger, meta=meta, sender=sender, links=links, llm=llm, source=source,
         pipeline=pipeline, notifier=notifier, digest=digest, worker=worker, portal=portal,
     )
+
+
+def _source_client(s: Settings, timeout: float) -> tuple[SourceClient, str, str]:
+    """(client, web base URL for commit links, host whose repo URLs count as internal libraries)."""
+    if s.source_provider == "github":
+        token = s.github_token.get_secret_value() if s.github_token else ""
+        client = GitHubSourceClient(build_http_client(
+            s.github_api_url, timeout, follow_redirects=True,
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json",
+                     "X-GitHub-Api-Version": "2022-11-28"},
+        ))
+        # github.com libraries take the release-notes path; internal ones come from dependency hints.
+        return client, s.github_url, ""
+    url = s.bitbucket_url or ""
+    token = s.bitbucket_token.get_secret_value() if s.bitbucket_token else ""
+    client = BitbucketClient(build_http_client(url, timeout, headers={"Authorization": f"Bearer {token}"}))
+    return client, url, urlparse(url).hostname or ""

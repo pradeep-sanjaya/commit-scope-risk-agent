@@ -2,7 +2,7 @@ import re
 
 from pydantic import BaseModel
 
-from scope_agent.adapters.bitbucket import BitbucketClient
+from scope_agent.adapters.source import SourceClient
 from scope_agent.adapters.github import GitHubClient
 from scope_agent.domain.models import DependencyChange
 from scope_agent.domain.versions import version_key, versions_between
@@ -45,12 +45,12 @@ class ReleaseNotesService:
         self,
         resolver: SourceResolver,
         github: GitHubClient,
-        bitbucket: BitbucketClient,
+        source: SourceClient,
         cache: KeyValueCache,
     ):
         self._resolver = resolver
         self._github = github
-        self._bitbucket = bitbucket
+        self._source = source
         self._cache = cache
 
     def between(self, change: DependencyChange) -> ReleaseNotes:
@@ -126,13 +126,13 @@ class ReleaseNotesService:
         return [], []
 
     def _from_bitbucket(self, change, source: SourceRepo, old, new) -> tuple[list, list] | None:
-        tags = self._bitbucket.list_tags(source.ref)
+        tags = self._source.list_tags(source.ref)
         artifact = _package_hint(change)
         old_tag = self._tag_for(tags, old, artifact)
         new_tag = self._tag_for(tags, new, artifact)
         if old_tag is None or new_tag is None:
             return None
-        messages = self._bitbucket.commit_messages_between(source.ref, old_tag, new_tag)
+        messages = self._source.commit_messages_between(source.ref, old_tag, new_tag)
         if not messages:
             return None
         link = f"{source.ref} commits {old_tag}..{new_tag}"

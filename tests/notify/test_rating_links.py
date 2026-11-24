@@ -25,6 +25,12 @@ def test_link_builder():
     assert lb.rating("f1", "noise").startswith("https://portal.example/rate/f1?v=noise&t=")
 
 
+def test_link_builder_github_commit_links():
+    from scope_agent.notify.rating_links import LinkBuilder
+    lb = LinkBuilder("https://github.com/", "https://jira.example", "https://portal.example", "s", "github")
+    assert lb.commit("acme/payments", "abc") == "https://github.com/acme/payments/commit/abc"
+
+
 def test_verify_rating_token():
     from scope_agent.notify.rating_links import rating_token, verify_rating_token
     t = rating_token("s", "f1", "useful")

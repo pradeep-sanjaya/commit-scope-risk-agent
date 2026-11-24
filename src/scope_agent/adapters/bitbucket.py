@@ -1,24 +1,15 @@
-import hashlib
-import hmac
 from datetime import datetime, timezone
 from fnmatch import fnmatchcase
 from urllib.parse import quote
 
 import httpx
 
+from scope_agent.adapters.source import decode as _decode
+from scope_agent.adapters.source import is_unusable as _is_unusable
+from scope_agent.adapters.source import verify_signature  # noqa: F401  (re-exported for callers)
 from scope_agent.domain.models import CommitData, FileChange, PushJob
 
-MAX_CONTENT_BYTES = 1024 * 1024
-BINARY_SNIFF_BYTES = 8192
 PAGE_SIZE = 100
-_ZERO_HASH = "0" * 40
-
-
-def verify_signature(secret: str, body: bytes, header: str | None) -> bool:
-    if not header:
-        return False
-    expected = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(expected.encode(), header.encode("utf-8", "replace"))
 
 
 def parse_refs_changed(payload: dict, branch_globs: list[str]) -> list[PushJob]:
@@ -46,17 +37,6 @@ def parse_refs_changed(payload: dict, branch_globs: list[str]) -> list[PushJob]:
             )
         )
     return jobs
-
-
-def _is_unusable(data: bytes | None) -> bool:
-    """Binary (NUL in first 8 KB) or over 1 MB."""
-    if data is None:
-        return False
-    return len(data) > MAX_CONTENT_BYTES or b"\x00" in data[:BINARY_SNIFF_BYTES]
-
-
-def _decode(data: bytes | None) -> str | None:
-    return None if data is None else data.decode("utf-8", errors="replace")
 
 
 class BitbucketClient:

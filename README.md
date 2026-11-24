@@ -1,8 +1,8 @@
 # scope-agent
 
-Commit scope and risk agent. A Bitbucket Data Center push webhook queues a job. A worker analyzes the
-commits with JIRA context and an LLM, then emails neutral, "for review" findings. Nothing blocks a push or
-merge, and nothing is written back to Bitbucket or JIRA.
+Commit scope and risk agent. A push webhook from Bitbucket Data Center or GitHub queues a job. A worker
+analyzes the commits with JIRA context and an LLM, then emails neutral, "for review" findings. Nothing blocks
+a push or merge, and nothing is written back to the source host or JIRA.
 
 ## Process model (twelve-factor)
 
@@ -69,9 +69,11 @@ Generated from `.env.example`.
 
 | Variable | Default | Description |
 |---|---|---|
-| `SCOPE_BITBUCKET_URL` | required | Bitbucket Data Center base URL |
-| `SCOPE_BITBUCKET_TOKEN` | required | Bitbucket Bearer token |
-| `SCOPE_WEBHOOK_SECRET` | required | Shared secret for the X-Hub-Signature webhook HMAC |
+| `SCOPE_SOURCE_PROVIDER` | `bitbucket` | Source-control host: `bitbucket` (Data Center) or `github` (github.com / GitHub Enterprise Server) |
+| `SCOPE_BITBUCKET_URL` | required for `bitbucket` | Bitbucket Data Center base URL |
+| `SCOPE_BITBUCKET_TOKEN` | required for `bitbucket` | Bitbucket Bearer token |
+| `SCOPE_GITHUB_URL` | `https://github.com` | GitHub web base for commit links (GitHub Enterprise Server: `https://<host>`) |
+| `SCOPE_WEBHOOK_SECRET` | required | Shared secret for the webhook HMAC (Bitbucket `X-Hub-Signature`, GitHub `X-Hub-Signature-256`) |
 | `SCOPE_JIRA_URL` | required | JIRA Cloud base URL |
 | `SCOPE_JIRA_EMAIL` | required | JIRA service account email (basic auth) |
 | `SCOPE_JIRA_TOKEN` | required | JIRA API token |
@@ -91,8 +93,8 @@ Generated from `.env.example`.
 | `SCOPE_FILES_PRIORITY` | `**/application*.yml,**/application*.yaml,**/application*.properties,**/*envoy*.y*ml,**/*gateway*.y*ml,**/helm/**,**/k8s/**,**/Dockerfile,**/environment*.ts,**/proxy.conf.json` | Comma-separated globs of files analyzed first |
 | `SCOPE_MAX_COMMITS_PER_PUSH` | `200` | Maximum commits analyzed per push |
 | `SCOPE_MAX_CHUNKS_PER_COMMIT` | `3` | Maximum LLM chunks per commit |
-| `SCOPE_GITHUB_API_URL` | `https://api.github.com` | GitHub API base URL (release notes) |
-| `SCOPE_GITHUB_TOKEN` | optional | GitHub token (optional) |
+| `SCOPE_GITHUB_API_URL` | `https://api.github.com` | GitHub REST API base: release notes, and the source host for `github` (Enterprise: `https://<host>/api/v3`) |
+| `SCOPE_GITHUB_TOKEN` | required for `github`, else optional | GitHub token with read access to the repositories; otherwise raises release-note rate limits |
 | `SCOPE_NEXUS_URL` | required | Nexus base URL |
 | `SCOPE_NEXUS_USER` | required | Nexus user |
 | `SCOPE_NEXUS_PASSWORD` | required | Nexus password |
@@ -135,6 +137,29 @@ Generated from `.env.example`.
 
 Bitbucket's "Test connection" sends an unsigned ping, so it only succeeds when a secret is configured on the
 webhook; with no secret it receives 401.
+
+## GitHub (instead of Bitbucket)
+
+Set `SCOPE_SOURCE_PROVIDER=github`. Repos are named `owner/name` everywhere (routing, areas, the CLI).
+
+1. Create a token that can read the repositories and set it as `SCOPE_GITHUB_TOKEN`: a fine-grained personal
+   access token (or a GitHub App token) with **Contents: read** and **Metadata: read** on the repos. The
+   Bitbucket variables are then not needed.
+2. GitHub Enterprise Server: set `SCOPE_GITHUB_API_URL=https://<host>/api/v3` and `SCOPE_GITHUB_URL=https://<host>`.
+3. In the repository (or organization): Settings, Webhooks, Add webhook.
+   - Payload URL: `{SCOPE_PUBLIC_BASE_URL}/webhook/github`, content type `application/json`.
+   - Secret: the value of `SCOPE_WEBHOOK_SECRET`. GitHub signs each delivery as
+     `X-Hub-Signature-256: sha256=<hex>`; unsigned or wrongly signed requests get 401.
+   - Events: "Just the push event". The initial `ping` gets 200.
+4. Set `SCOPE_BRANCHES` to the branches to analyze, for example `main,release/*`.
+
+Only the configured provider's webhook route is served. A GitHub webhook cannot reach a machine without a
+public URL; locally, forward deliveries with a tunnel (smee.io, ngrok) or skip webhooks and use
+`scope-agent analyze owner/name <sha>` and `scope-agent backtest owner/name --branch main`, which read commits
+straight from the API. Commit messages should carry the JIRA key, for example `V4-123: Fix checkout total`.
+
+Libraries whose source lives on github.com are handled through the release-notes path as before; internal
+libraries are found through `dependency-hints` entries and read through the same GitHub client.
 
 ## QA Impact Portal
 

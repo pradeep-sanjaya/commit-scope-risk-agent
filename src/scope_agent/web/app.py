@@ -3,6 +3,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from scope_agent.adapters.source import SourceProvider
 from scope_agent.persistence.jobs import JobQueue
 from scope_agent.persistence.ratings import RatingRepository
 from scope_agent.services.portal_queries import PortalQueries
@@ -20,9 +21,10 @@ def create_app(
     rating_secret: str,
     portal_queries: PortalQueries | None = None,
     portal_auth_header: str | None = None,
+    source_provider: SourceProvider = "bitbucket",
 ) -> FastAPI:
     app = FastAPI(title="scope-agent", docs_url=None, redoc_url=None, openapi_url=None)
-    app.include_router(webhook.build_router(webhook_secret, branches, jobs))
+    app.include_router(webhook.build_router(webhook_secret, branches, jobs, source_provider))
     app.include_router(rating.build_router(ratings, rating_secret))
     if portal_queries is not None:
         app.mount("/portal/static", StaticFiles(directory=STATIC_DIR), name="portal-static")

@@ -43,6 +43,35 @@ def test_missing_required_exits_naming_variable(monkeypatch, data_files, capsys)
     assert e.value.code == 2 and "SCOPE_JIRA_TOKEN" in capsys.readouterr().err
 
 
+def test_bitbucket_provider_requires_bitbucket_settings(monkeypatch, data_files, capsys):
+    set_env(monkeypatch, skip={"SCOPE_BITBUCKET_URL"})
+    with pytest.raises(SystemExit) as e:
+        load_settings()
+    err = capsys.readouterr().err
+    assert e.value.code == 2 and "SCOPE_BITBUCKET_URL: required when SCOPE_SOURCE_PROVIDER=bitbucket" in err
+
+
+def test_github_provider_needs_token_not_bitbucket(monkeypatch, data_files, capsys):
+    set_env(monkeypatch, skip={"SCOPE_BITBUCKET_URL", "SCOPE_BITBUCKET_TOKEN"})
+    monkeypatch.setenv("SCOPE_SOURCE_PROVIDER", "github")
+    with pytest.raises(SystemExit) as e:
+        load_settings()
+    err = capsys.readouterr().err
+    assert e.value.code == 2 and "SCOPE_GITHUB_TOKEN: required when SCOPE_SOURCE_PROVIDER=github" in err
+    assert "BITBUCKET" not in err
+    monkeypatch.setenv("SCOPE_GITHUB_TOKEN", "ghp_x")
+    s = load_settings()
+    assert (s.source_provider, s.bitbucket_url, s.github_url) == ("github", None, "https://github.com")
+
+
+def test_unknown_source_provider_exits(monkeypatch, data_files, capsys):
+    set_env(monkeypatch)
+    monkeypatch.setenv("SCOPE_SOURCE_PROVIDER", "gitlab")
+    with pytest.raises(SystemExit):
+        load_settings()
+    assert "SCOPE_SOURCE_PROVIDER" in capsys.readouterr().err
+
+
 def test_missing_routing_file_exits(monkeypatch, data_files, capsys):
     set_env(monkeypatch)
     monkeypatch.setenv("SCOPE_ROUTING_FILE", "/nonexistent.yaml")

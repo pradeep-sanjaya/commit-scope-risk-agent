@@ -10,14 +10,13 @@ CsvList = Annotated[list[str], NoDecode]
 CsvIntList = Annotated[list[int], NoDecode]
 
 _FILE_FIELDS = ("routing_file", "dependency_hints_file", "areas_file")
+_PROVIDER_FIELDS = {"bitbucket": ("bitbucket_url", "bitbucket_token"), "github": ("github_token",)}
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="SCOPE_", extra="ignore", env_ignore_empty=True)
 
-    # Bitbucket
-    bitbucket_url: str
-    bitbucket_token: SecretStr
+    # Source control: SCOPE_BITBUCKET_* or SCOPE_GITHUB_TOKEN are required for the chosen provider.
     webhook_secret: SecretStr
     # JIRA
     jira_url: str
@@ -43,6 +42,11 @@ class Settings(BaseSettings):
     dependency_hints_file: Path
     areas_file: Path
 
+    # Source control
+    source_provider: Literal["bitbucket", "github"] = "bitbucket"
+    bitbucket_url: str | None = None
+    bitbucket_token: SecretStr | None = None
+    github_url: str = "https://github.com"  # web base for commit links (GitHub Enterprise: https://<host>)
     # Branches and JIRA
     branches: CsvList = ["development", "hotfix/*", "release/*"]
     jira_ac_field: str | None = None
@@ -103,20 +107,17 @@ class Settings(BaseSettings):
         return v
 
     @model_validator(mode="after")
-    def _data_files_exist(self):
-        missing = [f for f in _FILE_FIELDS if not getattr(self, f).is_file()]
-        if missing:
+    def _cross_field_checks(self):
+        problems = [(f, str(getattr(self, f)), f"file not found: {getattr(self, f)}")
+                    for f in _FILE_FIELDS if not getattr(self, f).is_file()]
+        required = _PROVIDER_FIELDS[self.source_provider]
+        problems += [(f, None, f"required when SCOPE_SOURCE_PROVIDER={self.source_provider}")
+                     for f in required if getattr(self, f) is None]
+        if problems:
             raise ValidationError.from_exception_data(
                 type(self).__name__,
-                [
-                    InitErrorDetails(
-                        type="value_error",
-                        loc=(f,),
-                        input=str(getattr(self, f)),
-                        ctx={"error": f"file not found: {getattr(self, f)}"},
-                    )
-                    for f in missing
-                ],
+                [InitErrorDetails(type="value_error", loc=(f,), input=value, ctx={"error": message})
+                 for f, value, message in problems],
             )
         return self
 

@@ -19,15 +19,20 @@ def rating_url(base: str, secret: str, finding_id: str, value: str) -> str:
 
 
 class LinkBuilder:
-    def __init__(self, bitbucket_url: str, jira_url: str, public_base_url: str, rating_secret: str):
-        self._bitbucket = bitbucket_url.rstrip("/")
+    def __init__(self, source_url: str, jira_url: str, public_base_url: str, rating_secret: str,
+                 source_provider: str = "bitbucket"):
+        """`source_url` is the web base of the source host: Bitbucket's URL, or https://github.com."""
+        self._source = source_url.rstrip("/")
+        self._provider = source_provider
         self._jira = jira_url.rstrip("/")
         self._public = public_base_url.rstrip("/")
         self._secret = rating_secret
 
     def commit(self, repo: str, sha: str) -> str:
-        project, slug = repo.split("/", 1)
-        return f"{self._bitbucket}/projects/{project}/repos/{slug}/commits/{sha}"
+        owner, name = repo.split("/", 1)
+        if self._provider == "github":
+            return f"{self._source}/{owner}/{name}/commit/{sha}"
+        return f"{self._source}/projects/{owner}/repos/{name}/commits/{sha}"
 
     def ticket(self, key: str) -> str:
         return f"{self._jira}/browse/{key}"
