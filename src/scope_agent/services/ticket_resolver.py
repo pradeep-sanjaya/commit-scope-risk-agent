@@ -1,5 +1,8 @@
 import json
 
+import httpx
+import structlog
+
 from scope_agent.adapters.jira import JiraClient
 from scope_agent.domain.adf import adf_to_text, extract_ac
 from scope_agent.domain.models import EpicTicket, TicketContext
@@ -8,6 +11,8 @@ from scope_agent.persistence.cache import KeyValueCache
 NAMESPACE = "jira"
 MAX_EPIC_HOPS = 2
 _MISSING = "null"
+
+log = structlog.get_logger()
 
 
 def _is_epic(issue: dict) -> bool:
@@ -93,7 +98,14 @@ class TicketResolver:
         cached = self._cache.get(NAMESPACE, cache_key)
         if cached is not None:
             return [EpicTicket(**row) for row in json.loads(cached)]
-        issues = self._jira.search(f"parent = {epic_key} ORDER BY key", ["summary", "status", "assignee"])
+        try:
+            issues = self._jira.search(f"parent = {epic_key} ORDER BY key", ["summary", "status", "assignee"])
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code != 400:
+                raise
+            # JIRA answers 400 when the key does not exist or is not visible to us: it has no children.
+            log.warning("jira_epic_tickets_unknown_key", key=epic_key)
+            issues = []
         tickets = [
             EpicTicket(
                 key=i["key"],

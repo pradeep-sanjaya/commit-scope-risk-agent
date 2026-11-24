@@ -32,6 +32,7 @@ class EpicListRow(BaseModel):
     severity_counts: dict[str, int]
     last_change: datetime | None
     new_commits_since_prev: int
+    report_pending: bool = False  # records exist but no report has been built yet (or its job failed)
 
 
 class EpicPage(BaseModel):
@@ -105,6 +106,12 @@ class PortalQueries:
             else:
                 report = self._reports.latest(subject)
                 if report is None:
+                    keys = list(dict.fromkeys(k for r in recs for k in r.jira_keys))
+                    title = self._title(subject)
+                    row = self._synthetic(subject, title, len(keys), recs).model_copy(
+                        update={"report_pending": True})
+                    epics.append((row, [subject, title, *keys, *(a for r in recs for a in r.areas),
+                                        *{r.repo for r in recs}]))
                     continue
                 agg = report.content.aggregate
                 row = EpicListRow(

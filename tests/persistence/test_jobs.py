@@ -112,6 +112,27 @@ def test_claim_postgres_skip_locked(clock):
     assert {c1.id, c2.id} == {a, b}
 
 
+@pytest.mark.skipif(not os.environ.get("SCOPE_TEST_DATABASE_URL"), reason="needs Postgres")
+def test_postgres_forever_dedup_race_and_hold(clock, monkeypatch):
+    from scope_agent.persistence.jobs import LeaseLost
+    db = Database(os.environ["SCOPE_TEST_DATABASE_URL"])
+    db.create_all()
+    q = JobQueue(db, clock)
+    key = f"pg-dedup-{clock.now.timestamp()}-{os.getpid()}"
+    jid = q.enqueue("push", {}, key)
+    monkeypatch.setattr(JobQueue, "_blocked", lambda self, s, k, scope: False)
+    with db.session() as s:  # the failed insert must not poison the caller's transaction
+        assert q.enqueue("push", {}, key, session=s) is None
+        assert q.enqueue("push", {}, key + "-other", session=s) is not None
+    monkeypatch.undo()
+    while (job := q.claim(60)) is not None and job.id != jid:
+        q.complete(job.id, job.attempts)
+    with db.session() as s:
+        q.hold(job.id, job.attempts, s)
+    with pytest.raises(LeaseLost), db.session() as s:
+        q.hold(job.id, job.attempts + 1, s)
+
+
 def test_transitions_on_non_running_job_are_noops(jobs, clock):
     jid = jobs.enqueue("push", {}, "k")  # queued, never claimed
     assert jobs.complete(jid, 1) is False

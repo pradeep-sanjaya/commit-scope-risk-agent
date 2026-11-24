@@ -45,11 +45,19 @@ class EpicReportBuilder:
         if prev and prev.record_count == len(records) and prev.content.test_scope_status == "ok":
             return None
         tickets = self._epic_tickets(subject)
+        if not tickets:
+            # The subject key does not exist in JIRA (typo, or a project we cannot read): nothing to scope.
+            log.warning("epic_report_subject_unresolved", subject=subject)
+            return None
         contexts = {t.key: self._tickets.resolve(t.key) for t in tickets}
         findings = self._load_findings(records)
         agg = aggregate(subject, records, tickets)
         items, status = self._test_scope(subject, agg, records, contexts, findings,
                                          prev.content.test_scope if prev else None)
+        if (status == "pending" and prev and prev.content.test_scope_status == "pending"
+                and prev.record_count == len(records)):
+            # Still no budget and nothing new: the pending version already says this.
+            raise BudgetExceeded(f"epic report {subject} v{prev.version} still awaiting test scope")
         content = ReportContent(aggregate=agg, test_scope=items, test_scope_status=status)
         diff = diff_reports(prev.content if prev else None, content)
         version = self._reports.append(subject, content, diff, len(records))
@@ -58,11 +66,18 @@ class EpicReportBuilder:
         return version
 
     def _epic_tickets(self, subject: str) -> list[EpicTicket]:
-        epic = self._tickets.epic_tickets(subject)
-        if epic:
-            return epic
+        """The Epic's children; for a subject that is not an Epic (a story without one), the subject
+        itself first, then its children (sub-tasks). Empty when the subject does not resolve."""
+        children = self._tickets.epic_tickets(subject)
         ctx = self._tickets.resolve(subject)
-        return [EpicTicket(key=ctx.key, summary=ctx.summary, status=ctx.status, assignee=None)] if ctx else []
+        if ctx is None:
+            return children
+        own = EpicTicket(key=ctx.key, summary=ctx.summary, status=ctx.status, assignee=None)
+        if not children:
+            return [own]
+        if ctx.issue_type != "Epic" and all(t.key != ctx.key for t in children):
+            return [own, *children]
+        return children
 
     def _load_findings(self, records: list[ImpactRecord]) -> dict[str, Finding]:
         found = {}
@@ -91,18 +106,52 @@ class EpicReportBuilder:
         assert isinstance(verdict, TestScopeVerdict)
         return verdict.items
 
+    def _fits(self, prompt: str) -> bool:
+        return len(prompt) // 4 <= self._max_tokens
+
+    @staticmethod
+    def _buckets(agg: Aggregate, records: list[ImpactRecord]) -> list[tuple[list[EpicTicket], list[ImpactRecord]]]:
+        """One bucket per listed ticket (even without commits, for its acceptance criteria), plus one for
+        commits tagged with no listed ticket: the Epic key itself, or a sub-task of a child."""
+        listed = {t.key for t in agg.tickets}
+        buckets = [([t], [r for r in records if t.key in r.jira_keys]) for t in agg.tickets]
+        others = [r for r in records if not listed.intersection(r.jira_keys)]
+        if others:
+            buckets.append(([], others))
+        return buckets
+
+    def _parts(self, subject, tickets, records, contexts, findings) -> list[list[ImpactRecord]]:
+        """Split a bucket's records into consecutive parts whose prompt fits the input budget."""
+        parts: list[list[ImpactRecord]] = []
+        part: list[ImpactRecord] = []
+        for r in records:
+            candidate = part + [r]
+            if part and not self._fits(
+                    self._prompt(subject, aggregate(subject, candidate, tickets), candidate, contexts, findings)):
+                parts.append(part)
+                candidate = [r]
+            part = candidate
+        parts.append(part)
+        return parts
+
     def _test_scope(self, subject, agg, records, contexts, findings, previous):
         try:
             prompt = self._prompt(subject, agg, records, contexts, findings)
-            if len(prompt) // 4 <= self._max_tokens:
+            if self._fits(prompt):
                 return self._ask(prompt), "ok"
+            # Too large: scope each ticket (in parts that fit), then consolidate the partial items.
             collected: list[TestScopeItem] = []
-            for t in agg.tickets:
-                mine = [r for r in records if t.key in r.jira_keys]
-                sub = aggregate(subject, mine, [t])
-                collected += self._ask(self._prompt(subject, sub, mine, contexts, findings))
-            notes = [_format_item(i) for i in collected]
-            return self._ask(self._prompt(subject, agg, [], contexts, findings, notes)), "ok"
+            for tickets, mine in self._buckets(agg, records):
+                for part in self._parts(subject, tickets, mine, contexts, findings):
+                    sub = self._prompt(subject, aggregate(subject, part, tickets), part, contexts, findings)
+                    if not self._fits(sub):
+                        log.warning("epic_report_part_over_budget", subject=subject, commits=len(part))
+                    collected += self._ask(sub)
+            final = self._prompt(subject, agg, [], contexts, findings, [_format_item(i) for i in collected])
+            if not self._fits(final):
+                log.warning("epic_report_consolidation_skipped", subject=subject, items=len(collected))
+                return collected, "ok"
+            return self._ask(final), "ok"
         except BudgetExceeded:
             log.info("epic_report_budget_exceeded", subject=subject)
             return previous, "pending"

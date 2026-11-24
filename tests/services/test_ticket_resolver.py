@@ -125,3 +125,18 @@ def test_epic_tickets_jql_and_pagination(cache):
     assert json.loads(route.calls[0].request.content)["jql"] == "parent = PAY-10 ORDER BY key"
     assert r.epic_tickets("PAY-10") == tickets
     assert route.call_count == 2
+
+
+@respx.mock
+def test_epic_tickets_unknown_key_is_empty_not_error(cache):
+    """JIRA rejects `parent = KEY` with 400 when KEY does not exist or is not visible."""
+    respx.post(f"{BASE}/rest/api/3/search/jql").mock(return_value=httpx.Response(
+        400, json={"errorMessages": ["An issue with key 'PAY-99999' does not exist for field 'parent'."]}))
+    assert make(cache).epic_tickets("PAY-99999") == []
+
+
+@respx.mock
+def test_epic_tickets_server_error_still_raises(cache):
+    respx.post(f"{BASE}/rest/api/3/search/jql").mock(return_value=httpx.Response(500))
+    with pytest.raises(httpx.HTTPStatusError):
+        make(cache).epic_tickets("PAY-10")

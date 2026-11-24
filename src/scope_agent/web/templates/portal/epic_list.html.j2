@@ -13,7 +13,7 @@
 {% for r in rows %}
 {% set synthetic = r.subject.startswith("_") %}
 <tr>
-  <td>{% if synthetic %}<i>{{ r.title }}</i>{% else %}<a href="/portal/epics/{{ r.subject | urlencode }}"><b>{{ r.subject }}</b></a> {{ r.title if r.title != r.subject }}{% endif %}</td>
+  <td>{% if synthetic %}<i>{{ r.title }}</i>{% elif r.report_pending %}<b>{{ r.subject }}</b> {{ r.title if r.title != r.subject }} <span class="muted report-pending">report pending</span>{% else %}<a href="/portal/epics/{{ r.subject | urlencode }}"><b>{{ r.subject }}</b></a> {{ r.title if r.title != r.subject }}{% endif %}</td>
   <td>{{ r.tickets or "–" }}</td><td>{{ r.developers }}</td><td>{{ r.areas }}</td>
   <td>{{ (r.overlaps or "–") if not synthetic else "–" }}</td>
   <td>

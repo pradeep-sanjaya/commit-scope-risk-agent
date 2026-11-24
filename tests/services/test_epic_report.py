@@ -24,14 +24,19 @@ def rec(commit, ticket, areas=("Feature flags",), fids=()):
 
 
 class FakeTickets:
-    def __init__(self, epic):
+    def __init__(self, epic, children=None, unknown=()):
         self._epic = epic
+        self._children = children or {}
+        self._unknown = set(unknown)
 
     def epic_tickets(self, key):
-        return self._epic if key == "PAY-100" else []
+        return self._epic if key == "PAY-100" else self._children.get(key, [])
 
     def resolve(self, key):
-        return TicketContext(key=key, summary="s", description="", issue_type="Task", status="Open",
+        if key in self._unknown:
+            return None
+        issue_type = "Epic" if key == "PAY-100" else "Task"
+        return TicketContext(key=key, summary="s", description="", issue_type=issue_type, status="Open",
                              acceptance_criteria="AC " + key, components=[], labels=[], epic_key=None,
                              epic_summary=None, epic_description=None, linked_titles=[])
 
@@ -140,13 +145,103 @@ def test_epic_report_job_hitting_budget_is_deferred(env, db):
     assert reports.latest("PAY-100").content.test_scope_status == "pending"
 
 
+def _full_prompt_tokens(b, subject="PAY-100"):
+    from scope_agent.domain.epic_report import aggregate
+    records = b._records.for_subject(subject)
+    tickets = b._epic_tickets(subject)
+    contexts = {t.key: b._tickets.resolve(t.key) for t in tickets}
+    prompt = b._prompt(subject, aggregate(subject, records, tickets), records, contexts, b._load_findings(records))
+    return len(prompt) // 4
+
+
+def _long_note_commit(commit="c9", ticket="PAY-101"):
+    """Raw commit notes make the full prompt much larger than the consolidation prompt."""
+    return rec(commit, ticket).model_copy(update={"test_note": ["long " + "x" * 4000]})
+
+
 def test_falls_back_to_per_ticket_when_over_budget(env):
+    env[0].save([_long_note_commit()])
     llm = FakeLLM()
-    b, reports = build(env, llm, max_tokens=1)
+    b, reports = build(env, llm)
+    b._max_tokens = _full_prompt_tokens(b) - 1
     b.rebuild("PAY-100")
     assert len(llm.prompts) == 3  # two tickets + final
     assert "integration: call 1 — y [PAY-101]" in llm.prompts[2]
     assert reports.latest("PAY-100").content.test_scope[0].what == "call 3"
+    assert all(len(p) // 4 <= b._max_tokens for p in llm.prompts)
+
+
+def test_split_scope_keeps_commits_not_tagged_with_a_listed_ticket(env):
+    """Commits tagged with the Epic key itself or a sub-task are not under any listed ticket."""
+    env[0].save([rec("c3", "PAY-100"), rec("c4", "PAY-150"), _long_note_commit()])
+    llm = FakeLLM()
+    b, _ = build(env, llm)
+    b._max_tokens = _full_prompt_tokens(b) - 1
+    b.rebuild("PAY-100")
+    partials = llm.prompts[:-1]
+    assert any("note c3" in p and "note c4" in p for p in partials)
+    assert all(len(p) // 4 <= b._max_tokens for p in llm.prompts)
+
+
+def test_split_scope_chunks_one_large_ticket_to_fit(db):
+    impact = ImpactRepository(db)
+    long = [rec(f"c{i}", "PAY-101").model_copy(update={"test_note": [f"note c{i} " + "x" * 2000]})
+            for i in range(6)]
+    impact.save(long)
+    llm = FakeLLM()
+    b, reports = build((impact, FindingRepository(db), ReportRepository(db)), llm)
+    b._max_tokens = _full_prompt_tokens(b) // 3
+    b.rebuild("PAY-100")
+    assert all(len(p) // 4 <= b._max_tokens for p in llm.prompts)
+    partials = llm.prompts[:-1] if len(llm.prompts) > 1 else llm.prompts
+    for i in range(6):
+        assert any(f"note c{i} " in p for p in partials)
+    assert reports.latest("PAY-100").content.test_scope_status == "ok"
+
+
+def test_split_scope_returns_partial_items_when_final_prompt_cannot_fit(env):
+    llm = FakeLLM()
+    b, reports = build(env, llm, max_tokens=1)  # nothing fits: no consolidation call
+    b.rebuild("PAY-100")
+    assert len(llm.prompts) == 2  # one per ticket, no final
+    assert [i.what for i in reports.latest("PAY-100").content.test_scope] == ["call 1", "call 2"]
+
+
+def test_story_subject_lists_the_story_itself(db):
+    impact = ImpactRepository(db)
+    impact.save([rec("c1", "PAY-10").model_copy(update={"subject": "PAY-10", "epic_key": None})])
+    subtasks = [EpicTicket(key=k, summary="s", status="Open", assignee=None) for k in ("PAY-11", "PAY-12")]
+    impact_env = (impact, FindingRepository(db), ReportRepository(db))
+    b = EpicReportBuilder(impact, FakeTickets(TICKETS, children={"PAY-10": subtasks}), impact_env[1],
+                          impact_env[2], FakeLLM(), 60_000)
+    b.rebuild("PAY-10")
+    keys = [t.key for t in impact_env[2].latest("PAY-10").content.aggregate.tickets]
+    assert keys == ["PAY-10", "PAY-11", "PAY-12"]
+
+
+def test_unresolvable_subject_is_skipped_without_llm(db):
+    impact = ImpactRepository(db)
+    impact.save([rec("c1", "PAY-99999").model_copy(update={"subject": "PAY-99999", "epic_key": None})])
+    llm = FakeLLM()
+    reports = ReportRepository(db)
+    b = EpicReportBuilder(impact, FakeTickets(TICKETS, unknown={"PAY-99999"}), FindingRepository(db),
+                          reports, llm, 60_000)
+    assert b.rebuild("PAY-99999") is None
+    assert llm.prompts == [] and reports.latest("PAY-99999") is None
+
+
+def test_pending_rebuild_without_changes_appends_no_version(env):
+    llm = FakeLLM(_raise(BudgetExceeded()))
+    b, reports = build(env, llm)
+    with pytest.raises(BudgetExceeded):
+        b.rebuild("PAY-100")
+    with pytest.raises(BudgetExceeded):
+        b.rebuild("PAY-100")  # next day: still no budget, nothing new
+    assert [v.version for v in reports.versions("PAY-100")] == [1]
+    env[0].save([rec("c3", "PAY-101")])
+    with pytest.raises(BudgetExceeded):
+        b.rebuild("PAY-100")  # new commits are still shown while pending
+    assert [v.version for v in reports.versions("PAY-100")] == [1, 2]
 
 
 def test_plain_ticket_subject(db):

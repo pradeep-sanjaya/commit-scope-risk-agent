@@ -42,6 +42,32 @@ def test_spring_request_mapping_method_set_and_removed_and_changed():
     assert len(got) == 2
 
 
+def test_spring_class_word_in_header_comment_does_not_move_class_boundary():
+    after = (
+        '/* Copyright: this class is licensed under ... */\n'
+        'package p;\n'
+        '/** Controller class for payments. */\n'
+        '@RestController\n@RequestMapping("/api/pay") // the class prefix\n'
+        'public class PayController {\n'
+        ' // @GetMapping("/commented-out") void old(){}\n'
+        ' @GetMapping("/status") void s(){}\n'
+        ' @PostMapping("/charge") void c(){ String s = "/* not a comment */ class"; }\n}'
+    )
+    got = {(e.method, e.path) for e in endpoint_changes(fc("PayController.java", None, after))}
+    assert got == {("GET", "/api/pay/status"), ("POST", "/api/pay/charge")}
+
+
+def test_spring_interface_endpoints():
+    after = (
+        '@FeignClient(name = "ledger")\n@RequestMapping("/ledger")\n'
+        'public interface LedgerClient {\n'
+        '  @GetMapping("/entries/{id}") Entry get(@PathVariable String id);\n'
+        '  @PostMapping("/entries") Entry add(Entry e);\n}'
+    )
+    got = {(e.method, e.path) for e in endpoint_changes(fc("LedgerClient.java", None, after))}
+    assert got == {("GET", "/ledger/entries/{id}"), ("POST", "/ledger/entries")}
+
+
 def test_angular_route_removed_added_changed():
     p = "web/src/app/app-routing.module.ts"
     assert endpoint_changes(fc(p, "{ path: 'settings' }", "")) == [Endpoint("ROUTE", "settings", "removed", p)]

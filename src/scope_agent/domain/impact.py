@@ -43,7 +43,16 @@ class ImpactRecord(BaseModel):
 
 
 _JAVA_MAPPING = re.compile(r"@(Get|Post|Put|Delete|Patch|Request)Mapping\b(?:\s*\(([^)]*)\))?")
-_CLASS_KEYWORD = re.compile(r"\bclass\b")
+# The first type declaration ends the class-level annotations (interfaces cover Feign/HTTP clients).
+_TYPE_DECLARATION = re.compile(r"\b(?:class|interface|record|enum)\s+\w+")
+# String and char literals are matched (and kept) so comment markers inside them are not stripped.
+_JAVA_COMMENT_OR_LITERAL = re.compile(
+    r'"(?:\\.|[^"\\\n])*"|\'(?:\\.|[^\'\\\n])*\'|/\*.*?\*/|//[^\n]*', re.DOTALL,
+)
+
+
+def _strip_java_comments(source: str) -> str:
+    return _JAVA_COMMENT_OR_LITERAL.sub(lambda m: m.group(0) if m.group(0)[0] in "\"'" else " ", source)
 _PATH_ARG = re.compile(r'^\s*(?:(?:value|path)\s*=\s*)?(\{[^}]*\}|"[^"]*")')
 _NAMED_PATH_ARG = re.compile(r'\b(?:value|path)\s*=\s*(\{[^}]*\}|"[^"]*")')
 _STRING = re.compile(r'"([^"]*)"')
@@ -68,7 +77,8 @@ def _spring(source: str | None) -> dict[tuple[str, str], str]:
     """(METHOD, full path) -> annotation text."""
     if not source:
         return {}
-    class_at = _CLASS_KEYWORD.search(source)
+    source = _strip_java_comments(source)
+    class_at = _TYPE_DECLARATION.search(source)
     class_at = class_at.start() if class_at else len(source)
     prefix, found = "", {}
     prefix_seen = False

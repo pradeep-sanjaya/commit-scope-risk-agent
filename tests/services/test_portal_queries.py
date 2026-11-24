@@ -15,6 +15,22 @@ def test_epic_list_rows_and_synthetic_rows():
     assert rows[2].title == "Commits without a ticket" and rows[2].areas == 1
 
 
+def test_epic_without_report_is_listed_as_pending():
+    """During the debounce, or after its report job failed, an Epic must still be visible."""
+    from tests.portal_helpers import rec
+    q, db, _ = seed()
+    q._records.save([rec("e1", "PAY-201", "kim", ["Search"], "high", subject="PAY-200", epic="PAY-200", hours=9),
+                     rec("e2", "PAY-202", "lee", ["Search"], subject="PAY-200", epic="PAY-200", hours=8)])
+    rows = q.epic_list(None, None, False)
+    assert [r.subject for r in rows] == ["PAY-200", "PAY-100", NO_EPIC, UNASSIGNED]
+    pending = rows[0]
+    assert pending.report_pending and not rows[1].report_pending
+    assert (pending.tickets, pending.developers, pending.areas) == (2, 2, 1)
+    assert pending.severity_counts["high"] == 1
+    assert [r.subject for r in q.epic_list("pay-202", None, False)] == ["PAY-200"]
+    assert [r.subject for r in q.epic_list("search", None, True)] == ["PAY-200"]
+
+
 def test_epic_list_filters():
     q, _, _ = seed()
     assert [r.subject for r in q.epic_list(None, "PAY", True)] == ["PAY-100"]
