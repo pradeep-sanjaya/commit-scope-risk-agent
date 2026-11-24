@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 
 import httpx
 import structlog
+from sqlalchemy.engine import make_url
 
 from scope_agent.adapters.bitbucket import BitbucketClient
 from scope_agent.adapters.github import GitHubClient
@@ -70,7 +71,9 @@ class Container:
 def build_container(settings: Settings) -> Container:
     """Wire everything. Constructing clients performs no network I/O."""
     s = settings
-    log.info("startup_config", **s.model_dump(mode="json"))
+    config = s.model_dump(mode="json")
+    config["database_url"] = make_url(s.database_url).render_as_string(hide_password=True)
+    log.info("startup_config", **config)
     routing = load_routing(s.routing_file)
     hints = load_dependency_hints(s.dependency_hints_file)
 

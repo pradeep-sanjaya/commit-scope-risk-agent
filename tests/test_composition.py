@@ -40,3 +40,21 @@ def test_only_composition_constructs_adapters():
                 if name in ADAPTERS:
                     offenders.append(f"{rel}:{node.lineno} {name}")
     assert offenders == []
+
+
+def test_startup_log_masks_secrets(monkeypatch, data_files, capsys):
+    from scope_agent.logging import configure_logging
+    data_files["SCOPE_ROUTING_FILE"].write_text("default_leads: [lead@corp]\n")
+    set_env(monkeypatch)
+    monkeypatch.setenv("SCOPE_DATABASE_URL", "sqlite://")
+    monkeypatch.setenv("SCOPE_BITBUCKET_TOKEN", "bb-t0ken-xyz")
+    settings = load_settings()
+    settings = settings.model_copy(update={"database_url": "postgresql+psycopg://scope:s3cr3t@db:5432/scope"})
+    configure_logging("INFO")
+    from scope_agent import composition
+    monkeypatch.setattr(composition, "Database", lambda url: __import__("scope_agent.persistence.database", fromlist=["Database"]).Database("sqlite://"))
+    build_container(settings)
+    out = capsys.readouterr().out
+    assert "startup_config" in out and "scope:***@db:5432" in out
+    assert "s3cr3t" not in out
+    assert "bb-t0ken-xyz" not in out
