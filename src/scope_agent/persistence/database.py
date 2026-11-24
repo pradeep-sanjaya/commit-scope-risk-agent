@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     JSON, BigInteger, Column, Date, DateTime, Integer, MetaData, String, Table, Text,
-    TypeDecorator, create_engine,
+    TypeDecorator, UniqueConstraint, create_engine,
 )
 from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.engine import Engine
@@ -147,6 +147,18 @@ impact_areas = Table(
     Column("repo", String(256), primary_key=True),
     Column("commit", String(64), primary_key=True),
     Column("area", String(256), primary_key=True, index=True),
+)
+
+epic_reports = Table(
+    "epic_reports", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("subject", String(256), nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("created_at", UTCDateTime, nullable=False),
+    Column("record_count", Integer, nullable=False),
+    Column("content", JSON, nullable=False),
+    Column("diff", JSON, nullable=False),
+    UniqueConstraint("subject", "version", name="uq_epic_reports_subject_version"),
 )
 
 

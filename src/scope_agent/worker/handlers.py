@@ -4,6 +4,7 @@ from typing import Protocol
 import structlog
 
 from scope_agent.domain.models import PushJob
+from scope_agent.services.epic_report import EpicReportBuilder
 from scope_agent.services.pipeline import PushPipeline, PushResult
 from scope_agent.services.push_notifier import PushNotifier
 
@@ -37,3 +38,11 @@ class PushJobHandler:
         except Exception as exc:
             # Findings are already saved; a failed email must not trigger re-analysis.
             log.error("push_notify_failed", job_id=job_id, error=str(exc))
+
+
+class EpicReportJobHandler:
+    def __init__(self, builder: EpicReportBuilder):
+        self._builder = builder
+
+    def handle(self, job_id: int, payload: dict) -> None:
+        self._builder.rebuild(payload["subject"])

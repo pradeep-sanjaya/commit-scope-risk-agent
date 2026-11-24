@@ -26,6 +26,7 @@ from scope_agent.persistence.commits import CommitLedger
 from scope_agent.persistence.database import Database, utcnow
 from scope_agent.persistence.findings import FindingRepository
 from scope_agent.persistence.impact import ImpactRepository
+from scope_agent.persistence.reports import ReportRepository
 from scope_agent.persistence.jobs import JobQueue
 from scope_agent.persistence.meta import MetaStore
 from scope_agent.persistence.ratings import RatingRepository
@@ -40,10 +41,11 @@ from scope_agent.services.pipeline import PushPipeline
 from scope_agent.services.push_notifier import PushNotifier
 from scope_agent.services.release_notes import ReleaseNotesService
 from scope_agent.services.source_resolver import SourceResolver
+from scope_agent.services.epic_report import EpicReportBuilder
 from scope_agent.services.ticket_resolver import TicketResolver
 from scope_agent.services.usage_context import UsageContextBuilder
 from scope_agent.settings import Settings
-from scope_agent.worker.handlers import PushJobHandler
+from scope_agent.worker.handlers import EpicReportJobHandler, PushJobHandler
 from scope_agent.worker.retry_policy import RetryPolicy
 from scope_agent.worker.worker import Worker
 
@@ -131,8 +133,11 @@ def build_container(settings: Settings) -> Container:
     )
     notifier = PushNotifier(routing, sender, links)
     recorder = ImpactRecorder(impact, jobs, area_map, s.files_priority, s.report_debounce_seconds, utcnow)
+    reports = EpicReportBuilder(impact, tickets, findings, ReportRepository(db), llm, s.llm_max_input_tokens)
     worker = Worker(
-        jobs, {"push": PushJobHandler(pipeline, notifier, recorder)}, findings,
+        jobs,
+        {"push": PushJobHandler(pipeline, notifier, recorder), "epic_report": EpicReportJobHandler(reports)},
+        findings,
         RetryPolicy(s.retry_backoff_seconds), s.job_lease_seconds, s.timezone, utcnow,
     )
     digest = DigestService(findings, jobs, meta, sender, links, s.digest_recipients, utcnow)
