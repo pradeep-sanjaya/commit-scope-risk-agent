@@ -37,3 +37,16 @@ def test_budget_records_usage(db):
     g = BudgetGuard(Inner(), meter, 1000, lambda: DAY)
     g.analyze("s", "p", Out)
     assert meter.used(DAY) == 150
+
+
+def test_budget_records_tokens_of_failed_analysis(db):
+    from scope_agent.llm.base import LLMOutputError
+
+    class Failing:
+        def analyze(self, system, prompt, schema):
+            raise LLMOutputError("bad", 70, 30)
+
+    meter = TokenUsageMeter(db)
+    with pytest.raises(LLMOutputError):
+        BudgetGuard(Failing(), meter, 1000, lambda: DAY).analyze("s", "p", Out)
+    assert meter.used(DAY) == 100

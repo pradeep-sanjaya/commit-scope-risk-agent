@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from datetime import date
 
-from scope_agent.llm.base import BudgetExceeded, LLMClient, LLMResult, T
+from scope_agent.llm.base import BudgetExceeded, LLMOutputError, LLMClient, LLMResult, T
 from scope_agent.persistence.usage import TokenUsageMeter
 
 
@@ -17,6 +17,10 @@ class BudgetGuard:
         day = self._today()
         if self._meter.used(day) >= self._budget:
             raise BudgetExceeded(f"daily token budget {self._budget} reached")
-        result = self._inner.analyze(system, prompt, schema)
+        try:
+            result = self._inner.analyze(system, prompt, schema)
+        except LLMOutputError as e:
+            self._meter.add(day, e.input_tokens + e.output_tokens)
+            raise
         self._meter.add(day, result.input_tokens + result.output_tokens)
         return result

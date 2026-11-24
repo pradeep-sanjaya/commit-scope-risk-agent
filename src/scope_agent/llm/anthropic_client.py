@@ -46,7 +46,7 @@ class AnthropicClient:
                 error = "no report tool call"
                 retry = {"role": "user", "content": f"Please call the `{TOOL_NAME}` tool with your result."}
             messages = messages + [{"role": "assistant", "content": _dump(resp.content)}, retry]
-        raise LLMOutputError(f"invalid structured output after retry: {error}")
+        raise LLMOutputError(f"invalid structured output after retry: {error}", tin, tout)
 
 
 def _dump(content: list) -> list:

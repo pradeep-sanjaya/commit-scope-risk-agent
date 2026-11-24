@@ -70,3 +70,10 @@ def test_missing_tool_block_retries_with_plain_message():
     assert c.analyze("s", "p", Out).data.answer == 2
     last = fake.calls[1]["messages"][-1]
     assert last["role"] == "user" and isinstance(last["content"], str) and "report" in last["content"]
+
+
+def test_output_error_carries_token_counts():
+    c, _ = make([response([tool_block({"answer": "x"})], 10, 5), response([tool_block({"answer": "y"})], 20, 7)])
+    with pytest.raises(LLMOutputError) as ei:
+        c.analyze("s", "p", Out)
+    assert (ei.value.input_tokens, ei.value.output_tokens) == (30, 12)
