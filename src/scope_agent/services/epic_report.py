@@ -42,7 +42,7 @@ class EpicReportBuilder:
     def rebuild(self, subject: str) -> int | None:
         records = self._records.for_subject(subject)
         prev = self._reports.latest(subject)
-        if prev and prev.record_count == len(records):
+        if prev and prev.record_count == len(records) and prev.content.test_scope_status == "ok":
             return None
         tickets = self._epic_tickets(subject)
         contexts = {t.key: self._tickets.resolve(t.key) for t in tickets}
@@ -52,7 +52,10 @@ class EpicReportBuilder:
                                          prev.content.test_scope if prev else None)
         content = ReportContent(aggregate=agg, test_scope=items, test_scope_status=status)
         diff = diff_reports(prev.content if prev else None, content)
-        return self._reports.append(subject, content, diff, len(records))
+        version = self._reports.append(subject, content, diff, len(records))
+        if status == "pending":
+            raise BudgetExceeded(f"epic report {subject} v{version} awaiting test scope")  # worker defers the job
+        return version
 
     def _epic_tickets(self, subject: str) -> list[EpicTicket]:
         epic = self._tickets.epic_tickets(subject)
