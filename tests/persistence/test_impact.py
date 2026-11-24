@@ -2,6 +2,9 @@ from datetime import datetime, timedelta, timezone
 
 from scope_agent.domain.impact import Endpoint, ImpactRecord
 from scope_agent.domain.models import DependencyChange, Severity
+from sqlalchemy import select
+
+from scope_agent.persistence.database import impact_areas
 from scope_agent.persistence.impact import ImpactRepository
 
 T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -25,6 +28,9 @@ def test_repository_save_is_idempotent_and_immutable(db):
     assert set(got) == {"c1", "c2"}
     assert got["c1"].test_note == ["first"] and got["c1"].areas == ["A"]
     assert got["c1"] == rec(note="first")  # full round trip
+    with db.session() as s:
+        areas = [(r.commit, r.area) for r in s.execute(select(impact_areas)).all()]
+    assert sorted(areas) == [("c1", "A"), ("c2", "A")]
 
 
 def test_for_subject_ordered_and_subjects_and_latest_change(db):
