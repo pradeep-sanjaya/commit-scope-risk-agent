@@ -183,6 +183,11 @@ to the header the proxy sets (for example `X-Forwarded-User`); portal requests w
 webhook and rating links are not affected. When the variable is unset, anyone who can reach the `web` process
 can read the portal.
 
+**Self-contained:** the portal loads nothing from the internet, so it works on networks that block public CDNs.
+htmx 1.9.12 is served from `/portal/static/htmx.min.js` (pinned by its SHA-384 hash), fonts are the system's,
+and icons are inline SVG. It follows the OS light/dark setting. The search box in the top bar opens a ticket's
+page when you type an exact ticket key that has commits, and otherwise searches the Epic list.
+
 ## JIRA and Nexus accounts
 
 - JIRA Cloud: create an API token for a service account and set `SCOPE_JIRA_EMAIL` and `SCOPE_JIRA_TOKEN`

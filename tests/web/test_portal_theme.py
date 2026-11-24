@@ -54,3 +54,9 @@ def test_severity_macro_renders_badges():
     assert 'class="badge b-high">High<' in html
     assert 'class="badge b-low">Info<' in html
     assert 'class="badge b-medium">2 med<' in html
+
+
+def test_ticket_keys_never_break_inside():
+    """On narrow screens "DEMO-101" wrapped as "DEMO-" / "101"; keys may wrap between, not within."""
+    rule = re.search(r"(?m)^\.key\s*\{([^}]*)\}", CSS)
+    assert rule and "white-space: nowrap" in rule.group(1)
