@@ -6,7 +6,8 @@ from scope_agent.web import portal
 
 CSS = (Path(portal.__file__).parent / "static" / "portal.css").read_text()
 AA_PAIRS = [("fg", "bg"), ("fg", "panel"), ("muted", "panel"), ("accent", "panel"), ("high", "high-soft"),
-            ("med", "med-soft"), ("low", "low-soft"), ("new", "new-soft"), ("fg", "ov")]
+            ("med", "med-soft"), ("low", "low-soft"), ("new", "new-soft"), ("fg", "ov"), ("on-accent", "accent"),
+            ("muted", "low-soft"), ("accent", "accent-soft")]
 
 
 def _tokens(block: str) -> dict[str, str]:

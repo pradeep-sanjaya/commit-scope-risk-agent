@@ -2,7 +2,7 @@
    Colours are tokens; the dark block below overrides them. Text/badge pairs are checked for WCAG AA in tests. */
 :root {
   --bg: #f7f8fa; --panel: #ffffff; --panel-2: #fafbfc; --fg: #1b1f24; --muted: #5a6573; --line: #e3e7ec;
-  --accent: #2f5fd0; --accent-soft: #eaf0fd;
+  --accent: #2f5fd0; --accent-soft: #eaf0fd; --on-accent: #ffffff;
   --high: #c02a31; --high-soft: #fdecec; --med: #8f5400; --med-soft: #fff4e0; --low: #55606e; --low-soft: #eef1f4;
   --new: #156b3a; --new-soft: #e7f6ee; --ov: #fff8e6; --ov-bar: #e0a100;
   --top: #141a24; --top-fg: #e8ecf2; --top-muted: #aeb8c6; --top-field: #232b38;
@@ -13,7 +13,7 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #0f1217; --panel: #171b22; --panel-2: #1c2129; --fg: #e6e9ee; --muted: #a3adba; --line: #2a313c;
-    --accent: #8aabff; --accent-soft: #1c2a4a;
+    --accent: #8aabff; --accent-soft: #1c2a4a; --on-accent: #0f1217;
     --high: #ff9a9e; --high-soft: #3a1b1e; --med: #f3b454; --med-soft: #33260f; --low: #b8c1cc; --low-soft: #262c35;
     --new: #6fdc9f; --new-soft: #13301f; --ov: #2b2414; --ov-bar: #c99400;
     --top: #0a0d12; --top-fg: #e6e9ee; --top-muted: #9aa4b2; --top-field: #1a2029;
@@ -133,7 +133,7 @@ td.empty, .empty { color: var(--muted); text-align: center; padding: 28px 14px; 
 .check { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--fg); cursor: pointer; font-size: 13.5px; }
 .check:has(input:checked) { border-color: var(--high); background: var(--high-soft); color: var(--high); font-weight: 600; }
 .btn { cursor: pointer; font-weight: 600; }
-.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 
 /* Matrix */
 .matrix th:first-child, .matrix td:first-child { position: sticky; left: 0; background: var(--panel); z-index: 1; }
