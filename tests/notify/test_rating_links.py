@@ -20,6 +20,8 @@ def test_link_builder():
     lb = links()
     assert lb.commit("PAY/gateway", "abc") == "https://bb.example/projects/PAY/repos/gateway/commits/abc"
     assert lb.ticket("PAY-1") == "https://jira.example/browse/PAY-1"
+    assert lb.portal_epic("PAY-10") == "https://portal.example/portal/epics/PAY-10"
+    assert lb.portal_ticket("PAY-1") == "https://portal.example/portal/tickets/PAY-1"
     assert lb.rating("f1", "noise").startswith("https://portal.example/rate/f1?v=noise&t=")
 
 

@@ -1,0 +1,6 @@
+{% macro sev(value, label=None) -%}
+{%- if value %}<span class="{{ value | sev_class }}">{{ label if label is not none else (value | sev_value) }}</span>{% endif -%}
+{%- endmacro %}
+{% macro ticket_link(key) -%}
+<a href="/portal/tickets/{{ key | urlencode }}">{{ key }}</a>
+{%- endmacro %}

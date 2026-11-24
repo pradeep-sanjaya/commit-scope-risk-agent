@@ -6,6 +6,7 @@
 <p>Why it was flagged: {{ it.finding.explanation }}</p>
 {% if it.finding.evidence %}<ul>{% for e in it.finding.evidence %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
 <p><a href="{{ it.commit_url }}">Commit</a>{% for key, url in it.ticket_links %} | <a href="{{ url }}">{{ key }}</a>{% endfor %}</p>
+{% if it.portal_ticket_url %}<p>QA portal: <a href="{{ it.portal_ticket_url }}">ticket page</a>{% if it.portal_epic_url %} | <a href="{{ it.portal_epic_url }}">Epic page</a>{% endif %}</p>{% endif %}
 <p>Suggested reviewers: {{ it.finding.suggested_reviewers | join(", ") }}</p>
 <p><a href="{{ it.useful_url }}">Useful</a> | <a href="{{ it.noise_url }}">Noise</a></p>
 </div>

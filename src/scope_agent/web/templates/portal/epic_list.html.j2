@@ -1,0 +1,31 @@
+{% extends "portal/base.html.j2" %}
+{% from "portal/_macros.html.j2" import sev %}
+{% block content %}
+<form class="filters" method="get" action="/portal">
+  <input type="search" name="q" value="{{ q }}" placeholder="Search Epic, ticket, area or repo…">
+  <input type="text" name="project" value="{{ project }}" placeholder="Project (e.g. PAY)" size="12">
+  <label><input type="checkbox" name="high" value="1" {% if high %}checked{% endif %}> Has high risk</label>
+  <button type="submit">Filter</button>
+</form>
+<div class="table-wrap">
+<table>
+<tr><th>Epic</th><th>Tickets</th><th>Devs</th><th>Areas</th><th>Overlaps</th><th>Risk</th><th>Last change</th></tr>
+{% for r in rows %}
+{% set synthetic = r.subject.startswith("_") %}
+<tr>
+  <td>{% if synthetic %}<i>{{ r.title }}</i>{% else %}<a href="/portal/epics/{{ r.subject | urlencode }}"><b>{{ r.subject }}</b></a> {{ r.title if r.title != r.subject }}{% endif %}</td>
+  <td>{{ r.tickets or "–" }}</td><td>{{ r.developers }}</td><td>{{ r.areas }}</td>
+  <td>{{ (r.overlaps or "–") if not synthetic else "–" }}</td>
+  <td>
+    {% if r.severity_counts.get("high") %}{{ sev("high", r.severity_counts["high"] ~ " high") }}{% endif %}
+    {% if r.severity_counts.get("medium") %}{{ sev("medium", r.severity_counts["medium"] ~ " medium") }}{% endif %}
+    {% if r.severity_counts.get("low") %}{{ sev("low", r.severity_counts["low"] ~ " low") }}{% endif %}
+  </td>
+  <td {% if r.new_commits_since_prev %}class="new"{% endif %}>{{ r.last_change | ago }}{% if r.new_commits_since_prev %} · +{{ r.new_commits_since_prev }} commits{% endif %}</td>
+</tr>
+{% else %}
+<tr><td colspan="7" class="muted">No Epics match.</td></tr>
+{% endfor %}
+</table>
+</div>
+{% endblock %}

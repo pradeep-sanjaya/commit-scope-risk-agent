@@ -1,0 +1,13 @@
+{% from "portal/_macros.html.j2" import sev %}
+<div class="cell-detail">
+<h4>{{ area }} × <a href="/portal/tickets/{{ ticket | urlencode }}">{{ ticket }}</a></h4>
+{% for r in records %}
+<div>
+  <p><code>{{ r.commit[:7] }}</code> {{ r.repo }} · {{ r.author_name }} · {{ r.committed_at.strftime("%b %d") }} {{ sev(r.max_severity) }}</p>
+  {% if r.test_note %}<ul>{% for n in r.test_note %}<li>{{ n }}</li>{% endfor %}</ul>{% endif %}
+</div>
+{% else %}
+<p class="muted">No commits recorded for this cell.</p>
+{% endfor %}
+<p><a href="/portal/epics/{{ subject | urlencode }}?tab=areas-matrix">Back to the matrix</a></p>
+</div>

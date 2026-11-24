@@ -1,0 +1,25 @@
+{% set base = "/portal/epics/" ~ (page.subject | urlencode) %}
+{% set vq = ("&v=" ~ report.version) if pinned else "" %}
+{% set vq1 = ("?v=" ~ report.version) if pinned else "" %}
+{% set cols = agg.matrix | map(attribute="ticket") | unique | sort | list %}
+{% set cells = {} %}
+{% for c in agg.matrix %}{% set _ = cells.update({(c.area, c.ticket): c}) %}{% endfor %}
+<div class="toggle">
+  <a href="{{ base }}?tab=areas-list{{ vq }}" hx-get="{{ base }}/tab/areas-list{{ vq1 }}" hx-target="#tab-body">List</a><a class="on" href="{{ base }}?tab=areas-matrix{{ vq }}" hx-get="{{ base }}/tab/areas-matrix{{ vq1 }}" hx-target="#tab-body">Matrix</a>
+</div>
+<div class="table-wrap">
+<table>
+<tr><th>Area ↓ / Ticket →</th>{% for k in cols %}<th><a href="/portal/tickets/{{ k | urlencode }}">{{ k }}</a></th>{% endfor %}</tr>
+{% for r in agg.area_rows %}
+<tr {% if r.overlap %}class="ov"{% endif %}>
+  <td><b>{{ r.area }}</b>{% if r.area in diff.new_areas %}<span class="new-badge">new in v{{ report.version }}</span>{% endif %}</td>
+  {% for k in cols %}
+  {% set c = cells.get((r.area, k)) %}
+  <td class="cell-x">{% if c %}<a href="{{ base }}/cell?area={{ r.area | urlencode }}&amp;ticket={{ k | urlencode }}" hx-get="{{ base }}/cell?area={{ r.area | urlencode }}&amp;ticket={{ k | urlencode }}" hx-target="#cell-detail">{% if c.max_severity %}<span class="{{ c.max_severity | sev_class }}">●</span> {% endif %}{{ c.commits }}</a>{% endif %}</td>
+  {% endfor %}
+</tr>
+{% endfor %}
+</table>
+</div>
+<p class="muted"><small>Select a cell to see that ticket's commits in that area, and what to test.</small></p>
+<div id="cell-detail"></div>

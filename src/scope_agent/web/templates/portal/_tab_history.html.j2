@@ -1,0 +1,12 @@
+<div class="table-wrap">
+<table>
+<tr><th>Version</th><th>Created</th><th>Commits recorded</th><th>Changes since previous</th></tr>
+{% for v in page.versions | reverse %}
+<tr>
+  <td><a href="/portal/epics/{{ page.subject | urlencode }}?tab=history&amp;v={{ v.version }}">v{{ v.version }}</a>{% if v.version == report.version %} <span class="muted">(viewing)</span>{% endif %}</td>
+  <td>{{ v.created_at.strftime("%Y-%m-%d %H:%M") }}</td><td>{{ v.record_count }}</td>
+  <td>+{{ v.diff.new_commits }} commits{% if v.diff.new_areas %}, new areas: {{ v.diff.new_areas | join(", ") }}{% endif %}{% if v.diff.new_overlaps %}, new overlaps: {{ v.diff.new_overlaps | join(", ") }}{% endif %}{% if v.diff.new_test_items %}, {{ v.diff.new_test_items | length }} new test item(s){% endif %}</td>
+</tr>
+{% endfor %}
+</table>
+</div>

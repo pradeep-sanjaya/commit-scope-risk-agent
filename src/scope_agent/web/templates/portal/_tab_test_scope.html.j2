@@ -1,0 +1,24 @@
+{% set items = report.content.test_scope or [] %}
+{% set fresh = diff.new_test_items | map(attribute="what") | list %}
+{% if report.content.test_scope_status == "pending" and not items %}
+<p class="muted">Test scope pending (LLM budget).</p>
+{% else %}
+<div class="table-wrap">
+<table>
+<tr><th>Type</th><th>What to test</th><th>Why</th><th>From</th></tr>
+{% for i in items %}
+<tr {% if i.tickets | length > 1 %}class="ov"{% endif %}>
+  <td>{% if i.type == "non_functional" %}<span class="sev-h">{{ i.type }}</span>{% else %}{{ i.type }}{% endif %}</td>
+  <td>{{ i.what }}{% if i.what in fresh %}<span class="new-badge">new in v{{ report.version }}</span>{% endif %}</td>
+  <td>{{ i.why }}</td>
+  <td>{% for k in i.tickets %}<a href="/portal/tickets/{{ k | urlencode }}">{{ k }}</a>{{ ", " if not loop.last }}{% endfor %}</td>
+</tr>
+{% else %}
+<tr><td colspan="4" class="muted">No test scope items.</td></tr>
+{% endfor %}
+</table>
+</div>
+{% for i in diff.new_test_items %}
+<p class="new">New in v{{ report.version }}: "{{ i.type }}: {{ i.what }}"</p>
+{% endfor %}
+{% endif %}

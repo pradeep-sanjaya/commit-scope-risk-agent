@@ -26,3 +26,12 @@ def test_digest_subject_and_counts():
 def test_digest_zero_findings():
     msg = render_digest([], 0, 0, START, END, links())
     assert msg["Subject"].endswith("0 high, 0 findings")
+
+
+def test_digest_links_ticket_and_epic_pages():
+    msg = render_digest([finding("h", Severity.high)], 0, 0, START, END, links(), epics={"PAY-12": "PAY-10"})
+    text = msg.get_body(("plain",)).get_content()
+    assert "https://portal.example/portal/epics/PAY-10" in text
+    assert "https://portal.example/portal/tickets/PAY-12" in text
+    plain = render_digest([finding("h", Severity.high)], 0, 0, START, END, links())
+    assert "/portal/epics/" not in plain.get_body(("plain",)).get_content()

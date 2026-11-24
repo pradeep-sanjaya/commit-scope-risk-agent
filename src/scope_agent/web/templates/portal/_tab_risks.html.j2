@@ -1,0 +1,14 @@
+{% from "portal/_macros.html.j2" import sev %}
+<div class="table-wrap">
+<table>
+<tr><th>Severity</th><th>Finding</th><th>Why it was flagged</th><th>Ticket</th></tr>
+{% for f in risks %}
+<tr>
+  <td>{{ sev(f.severity) }}</td><td>{{ f.title }}</td><td>{{ f.explanation }}</td>
+  <td>{% for k in f.jira_keys %}<a href="/portal/tickets/{{ k | urlencode }}">{{ k }}</a>{{ ", " if not loop.last }}{% else %}–{% endfor %}</td>
+</tr>
+{% else %}
+<tr><td colspan="4" class="muted">No findings recorded for this Epic.</td></tr>
+{% endfor %}
+</table>
+</div>

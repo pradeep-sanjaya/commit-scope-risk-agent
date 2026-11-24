@@ -38,6 +38,7 @@ from scope_agent.services.impact_recorder import ImpactRecorder
 from scope_agent.services.library_docs import LibraryDocsService
 from scope_agent.services.library_profile import LibraryProfileBuilder
 from scope_agent.services.pipeline import PushPipeline
+from scope_agent.services.portal_queries import PortalQueries
 from scope_agent.services.push_notifier import PushNotifier
 from scope_agent.services.release_notes import ReleaseNotesService
 from scope_agent.services.source_resolver import SourceResolver
@@ -73,6 +74,7 @@ class Container:
     notifier: PushNotifier
     digest: DigestService
     worker: Worker
+    portal: PortalQueries
 
 
 def build_container(settings: Settings) -> Container:
@@ -133,7 +135,8 @@ def build_container(settings: Settings) -> Container:
     )
     notifier = PushNotifier(routing, sender, links)
     recorder = ImpactRecorder(impact, jobs, area_map, s.files_priority, s.report_debounce_seconds, utcnow)
-    reports = EpicReportBuilder(impact, tickets, findings, ReportRepository(db), llm, s.llm_max_input_tokens)
+    report_repo = ReportRepository(db)
+    reports = EpicReportBuilder(impact, tickets, findings, report_repo, llm, s.llm_max_input_tokens)
     worker = Worker(
         jobs,
         {"push": PushJobHandler(pipeline, notifier, recorder), "epic_report": EpicReportJobHandler(reports)},
@@ -141,9 +144,10 @@ def build_container(settings: Settings) -> Container:
         RetryPolicy(s.retry_backoff_seconds), s.job_lease_seconds, s.timezone, utcnow,
     )
     digest = DigestService(findings, jobs, meta, sender, links, s.digest_recipients, utcnow)
+    portal = PortalQueries(report_repo, impact, findings, tickets)
     return Container(
         settings=s, routing=routing, hints=hints, area_map=area_map, db=db, jobs=jobs, findings=findings,
         impact=impact, ratings=ratings,
         ledger=ledger, meta=meta, sender=sender, links=links, llm=llm, bitbucket=bitbucket,
-        pipeline=pipeline, notifier=notifier, digest=digest, worker=worker,
+        pipeline=pipeline, notifier=notifier, digest=digest, worker=worker, portal=portal,
     )

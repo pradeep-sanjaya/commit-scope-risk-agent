@@ -11,6 +11,11 @@ def _flagged(result: PushResult):
     return sorted(flagged, key=lambda f: -f.severity.rank)
 
 
+def _epic_url(f, result: PushResult, links: LinkBuilder) -> str | None:
+    ctx = result.tickets.get(f.jira_keys[0]) if f.jira_keys else None
+    return links.portal_epic(ctx.epic_key) if ctx and ctx.epic_key else None
+
+
 def should_send_push(result: PushResult) -> bool:
     return bool(_flagged(result)) or any(result.summaries.values())
 
@@ -28,6 +33,8 @@ def render_push(result: PushResult, links: LinkBuilder) -> EmailMessage:
             "finding": f,
             "commit_url": links.commit(f.repo, f.commit),
             "ticket_links": [(k, links.ticket(k)) for k in f.jira_keys],
+            "portal_ticket_url": links.portal_ticket(f.jira_keys[0]) if f.jira_keys else None,
+            "portal_epic_url": _epic_url(f, result, links),
             "useful_url": links.rating(f.id, "useful"),
             "noise_url": links.rating(f.id, "noise"),
         }

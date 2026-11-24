@@ -1,0 +1,22 @@
+{% set base = "/portal/epics/" ~ (page.subject | urlencode) %}
+{% set vq = ("&v=" ~ report.version) if pinned else "" %}
+{% set vq1 = ("?v=" ~ report.version) if pinned else "" %}
+<div class="toggle">
+  <a class="on" href="{{ base }}?tab=areas-list{{ vq }}" hx-get="{{ base }}/tab/areas-list{{ vq1 }}" hx-target="#tab-body">List</a><a href="{{ base }}?tab=areas-matrix{{ vq }}" hx-get="{{ base }}/tab/areas-matrix{{ vq1 }}" hx-target="#tab-body">Matrix</a>
+</div>
+<div class="table-wrap">
+<table>
+<tr><th>Area</th><th>Changed by</th><th>Change kinds</th><th>Risk</th></tr>
+{% for r in agg.area_rows %}
+<tr {% if r.overlap %}class="ov"{% endif %}>
+  <td><b>{{ r.area }}</b>{% if r.area in diff.new_areas %}<span class="new-badge">new in v{{ report.version }}</span>{% endif %}
+    {% if r.overlap %}<br><small>{{ r.tickets | length }} tickets, test together{% if r.area in diff.new_overlaps %} <span class="new-badge">new overlap in v{{ report.version }}</span>{% endif %}</small>{% endif %}</td>
+  <td>{% for k in r.tickets %}<a href="/portal/tickets/{{ k | urlencode }}">{{ k }}</a>{{ ", " if not loop.last }}{% endfor %}</td>
+  <td>{% for k in r.change_kinds %}<span class="tag">{{ k }}</span>{% endfor %}</td>
+  <td>{% if r.max_severity %}<span class="{{ r.max_severity | sev_class }}">{{ r.max_severity | sev_value }}</span>{% endif %}</td>
+</tr>
+{% else %}
+<tr><td colspan="4" class="muted">No impacted areas recorded.</td></tr>
+{% endfor %}
+</table>
+</div>

@@ -12,7 +12,7 @@
 {% for r in repos %}
 <h3>{{ r.repo }}</h3>
 {% for t in r.tickets %}
-<h4>{% if t.url %}<a href="{{ t.url }}">{{ t.key }}</a>{% else %}{{ t.key }}{% endif %}</h4>
+<h4>{% if t.url %}<a href="{{ t.url }}">{{ t.key }}</a>{% else %}{{ t.key }}{% endif %}{% if t.portal_url %} <small><a href="{{ t.portal_url }}">QA portal</a>{% if t.epic_url %} | <a href="{{ t.epic_url }}">Epic</a>{% endif %}</small>{% endif %}</h4>
 <ul>
 {% for it in t.entries %}
 <li>[{{ it.finding.severity.value }}] {{ it.finding.title }} - {{ it.finding.explanation }} (<a href="{{ it.commit_url }}">commit</a>)</li>

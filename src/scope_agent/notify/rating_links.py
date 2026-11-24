@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+from urllib.parse import quote
 
 
 def rating_token(secret: str, finding_id: str, value: str) -> str:
@@ -33,3 +34,9 @@ class LinkBuilder:
 
     def rating(self, finding_id: str, value: str) -> str:
         return rating_url(self._public, self._secret, finding_id, value)
+
+    def portal_epic(self, subject: str) -> str:
+        return f"{self._public}/portal/epics/{quote(subject, safe='')}"
+
+    def portal_ticket(self, key: str) -> str:
+        return f"{self._public}/portal/tickets/{quote(key, safe='')}"

@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}QA Impact Portal{% endblock %}</title>
+<link rel="stylesheet" href="/portal/static/portal.css">
+<script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js" integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2" crossorigin="anonymous"></script>
+</head>
+<body>
+<header class="top"><a href="/portal">QA Impact Portal</a> <span class="muted">read-only; for review</span></header>
+<main>
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>

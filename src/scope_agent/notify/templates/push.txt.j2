@@ -10,6 +10,12 @@ Commit: {{ it.commit_url }}
 {% for key, url in it.ticket_links %}
 Ticket {{ key }}: {{ url }}
 {% endfor %}
+{% if it.portal_ticket_url %}
+QA portal ticket page: {{ it.portal_ticket_url }}
+{% endif %}
+{% if it.portal_epic_url %}
+QA portal Epic page: {{ it.portal_epic_url }}
+{% endif %}
 Suggested reviewers: {{ it.finding.suggested_reviewers | join(", ") }}
 Useful: {{ it.useful_url }}
 Noise: {{ it.noise_url }}

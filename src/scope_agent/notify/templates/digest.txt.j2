@@ -12,6 +12,13 @@ Deferred (budget): {{ deferred }}
 {% for t in r.tickets %}
 -- {{ t.key }}{% if t.url %} ({{ t.url }}){% endif %}
 
+{% if t.portal_url %}
+QA portal: {{ t.portal_url }}
+{% endif %}
+{% if t.epic_url %}
+QA portal Epic: {{ t.epic_url }}
+{% endif %}
+
 {% for it in t.entries %}
 [{{ it.finding.severity.value }}] {{ it.finding.title }} - {{ it.finding.explanation }} ({{ it.commit_url }})
 {% endfor %}

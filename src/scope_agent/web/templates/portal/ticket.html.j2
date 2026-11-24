@@ -1,0 +1,34 @@
+{% extends "portal/base.html.j2" %}
+{% from "portal/_macros.html.j2" import sev %}
+{% set t = page.ticket %}
+{% block title %}{{ t.key }} · QA Impact Portal{% endblock %}
+{% block content %}
+<div class="crumb"><a href="/portal">Epics</a>{% if t.epic_key %} › <a href="/portal/epics/{{ t.epic_key | urlencode }}">{{ t.epic_key }}</a>{% endif %} › {{ t.key }}</div>
+<h2>{{ t.key }}{% if t.summary %} · {{ t.summary }}{% endif %}{% if t.status %} · <span class="tag">{{ t.status }}</span>{% endif %}</h2>
+<div class="cols">
+  <div>
+    <h4>Acceptance criteria (from JIRA)</h4>
+    {% if t.acceptance_criteria %}<pre style="white-space:pre-wrap">{{ t.acceptance_criteria }}</pre>{% else %}<p class="muted">None found.</p>{% endif %}
+    <h4>Impacted areas</h4>
+    <p>{% for a in page.areas %}<span class="tag">{{ a }}</span>{% else %}<span class="muted">none</span>{% endfor %}</p>
+    <h4>Findings</h4>
+    {% for f in page.findings %}<p>{{ sev(f.severity) }} {{ f.title }}<br><small class="muted">{{ f.explanation }}</small></p>{% else %}<p class="muted">None.</p>{% endfor %}
+  </div>
+  <div style="flex:1.3">
+    <h4>Commits ({{ page.records | length }}) · each update recorded</h4>
+    <div class="table-wrap">
+    <table>
+    <tr><th>When</th><th>Commit</th><th>Areas</th></tr>
+    {% for r in page.records %}
+    <tr>
+      <td>{{ r.committed_at.strftime("%b %d") }}</td>
+      <td><code>{{ r.commit[:7] }}</code> {{ r.repo }} {{ sev(r.max_severity) }}
+        {% for n in r.test_note %}<br><small>{{ n }}</small>{% endfor %}</td>
+      <td>{{ r.areas | join(", ") }}</td>
+    </tr>
+    {% endfor %}
+    </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

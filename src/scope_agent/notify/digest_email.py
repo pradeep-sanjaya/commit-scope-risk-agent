@@ -11,6 +11,7 @@ NO_TICKET = "No ticket"
 def render_digest(
     findings: list[Finding], errors: int, deferred: int,
     start: datetime, end: datetime, links: LinkBuilder,
+    epics: dict[str, str] | None = None,
 ) -> EmailMessage:
     high = sum(1 for f in findings if f.severity is Severity.high)
     date = end.astimezone(timezone.utc).strftime("%Y-%m-%d")
@@ -22,7 +23,9 @@ def render_digest(
         grouped.setdefault(f.repo, {}).setdefault(f.jira_keys[0] if f.jira_keys else NO_TICKET, []).append(entry)
     repos = [
         {"repo": repo, "tickets": [
-            {"key": key, "url": links.ticket(key) if key != NO_TICKET else None, "entries": items}
+            {"key": key, "url": links.ticket(key) if key != NO_TICKET else None,
+             "portal_url": links.portal_ticket(key) if key != NO_TICKET else None,
+             "epic_url": links.portal_epic(epics[key]) if epics and key in epics else None, "entries": items}
             for key, items in tickets.items()
         ]}
         for repo, tickets in grouped.items()

@@ -36,6 +36,7 @@ def web() -> None:
         webhook_secret=settings.webhook_secret.get_secret_value(),
         branches=settings.branches, jobs=c.jobs, ratings=c.ratings,
         rating_secret=settings.rating_secret.get_secret_value(),
+        portal_queries=c.portal, portal_auth_header=settings.portal_auth_header,
     )
     uvicorn.run(api, host="0.0.0.0", port=settings.port, log_config=None)
 

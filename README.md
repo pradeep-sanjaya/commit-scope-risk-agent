@@ -115,6 +115,28 @@ Generated from `.env.example`.
 Bitbucket's "Test connection" sends an unsigned ping, so it only succeeds when a secret is configured on the
 webhook; with no secret it receives 401.
 
+## QA Impact Portal
+
+The `web` process serves a read-only portal at `{SCOPE_PUBLIC_BASE_URL}/portal`:
+
+- `/portal`: Epics with tickets, developers, impacted areas, overlaps and severity counts. Filter with `?q=`
+  (subject, title, ticket keys, area names, repo), `?project=` and `?high=1`.
+- `/portal/epics/{subject}`: the latest consolidated Epic impact report, with tabs for impacted areas (list
+  and ticket × area matrix), tickets, test scope, risks and version history. `?v=N` shows an older version, and
+  `?tab=` opens a tab without JavaScript.
+- `/portal/tickets/{key}`: one ticket's areas, findings and commits, newest first.
+
+Push emails link each finding's ticket page and its Epic page, and the digest links each Epic group.
+
+Impacted areas come from `SCOPE_AREAS_FILE`, which maps file globs to area names per repository slug (`"*"`
+applies to every repository); see `deploy/areas.example.yaml`. A file that matches no glob is reported as
+`<slug>: <top-level directory>`.
+
+**Access:** the portal has no login of its own. Run it behind your SSO proxy and set `SCOPE_PORTAL_AUTH_HEADER`
+to the header the proxy sets (for example `X-Forwarded-User`); portal requests without it then get 401. The
+webhook and rating links are not affected. When the variable is unset, anyone who can reach the `web` process
+can read the portal.
+
 ## JIRA and Nexus accounts
 
 - JIRA Cloud: create an API token for a service account and set `SCOPE_JIRA_EMAIL` and `SCOPE_JIRA_TOKEN`

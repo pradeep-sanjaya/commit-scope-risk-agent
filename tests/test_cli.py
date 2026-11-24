@@ -83,3 +83,17 @@ def test_cli_exits_2_on_missing_env(monkeypatch, data_files):
     set_env(monkeypatch, skip={"SCOPE_JIRA_TOKEN"})
     res = runner.invoke(cli.app, ["report"])
     assert res.exit_code == 2
+
+
+def test_cli_web_serves_portal(monkeypatch, data_files):
+    portal = object()
+    container = SimpleNamespace(jobs=object(), ratings=object(), portal=portal)
+    _patch(monkeypatch, data_files, container)
+    monkeypatch.setenv("SCOPE_PORTAL_AUTH_HEADER", "X-Forwarded-User")
+    seen = {}
+    monkeypatch.setattr(cli, "create_app", lambda **kw: seen.update(kw) or "app")
+    monkeypatch.setattr(cli.uvicorn, "run", lambda app, **kw: seen.setdefault("ran", app))
+    res = runner.invoke(cli.app, ["web"])
+    assert res.exit_code == 0, res.output
+    assert seen["portal_queries"] is portal and seen["portal_auth_header"] == "X-Forwarded-User"
+    assert seen["ran"] == "app"

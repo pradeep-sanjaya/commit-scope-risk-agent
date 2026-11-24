@@ -1,4 +1,4 @@
-from scope_agent.domain.models import Severity
+from scope_agent.domain.models import Severity, TicketContext
 from scope_agent.notify.push_email import render_push, should_send_push
 from tests.notify.helpers import finding, links, result, summary
 
@@ -34,3 +34,16 @@ def test_push_html_escapes_untrusted():
     assert "<script>x</script>" not in html and "&lt;script&gt;" in html
     assert "<b>e</b>" not in html
     assert "<script>x</script>" in msg.get_body(("plain",)).get_content()
+
+
+def test_push_email_contains_portal_links():
+    r = result([finding("hi", Severity.high, keys=("PAY-12",))])
+    text = render_push(r, links()).get_body(("plain",)).get_content()
+    assert "https://portal.example/portal/tickets/PAY-12" in text
+    assert "/portal/epics/" not in text  # epic unknown
+    r.tickets = {"PAY-12": TicketContext(
+        key="PAY-12", summary="s", description="", issue_type="Story", status="Open", acceptance_criteria=None,
+        components=[], labels=[], epic_key="PAY-10", epic_summary="E", epic_description=None, linked_titles=[])}
+    msg = render_push(r, links())
+    assert "https://portal.example/portal/epics/PAY-10" in msg.get_body(("plain",)).get_content()
+    assert "/portal/tickets/PAY-12" in msg.get_body(("html",)).get_content()
